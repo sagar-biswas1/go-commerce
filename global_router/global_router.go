@@ -1,7 +1,7 @@
 package global_router
 
 import (
-	"go-commerce/middlewares"
+	middleware "go-commerce/middlewares"
 	"net/http"
 )
 
@@ -16,6 +16,10 @@ func GlobalRouter( mux *http.ServeMux) http.Handler{
 		}
 	}
 
-	return middlewares.HandleCorsMiddleware(http.HandlerFunc(handleAllReq))
+	manager:=middleware.NewManager()
+
+	m:= manager.With(middleware.HandleCorsMiddleware,middleware.Logger)
+
+	return m(handleAllReq)
 
 }
