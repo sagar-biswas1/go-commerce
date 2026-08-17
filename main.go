@@ -39,21 +39,43 @@ var productList = []Product{
 	},
 }
 
+
+func handleCors (w http.ResponseWriter,){
+        w.Header().Set("Access-Control-Allow-Origin","*")
+        w.Header().Set("Access-Control-Allow-Methods","GET, POST, PUT, PATCH, DELETE, OPTIONS")
+
+		w.Header().Set("Access-Control-Allow-Headers","Content-Type, x-api-key")
+		w.Header().Set("Content-Type", "application/json")
+}
+
+func handlePreFlightReq(w http.ResponseWriter, r *http.Request){
+	if r.Method== "OPTIONS"{
+			w.WriteHeader(200) 
+		}
+}
+
+func sendData (w http.ResponseWriter, data interface{}, statusCode int){
+        w.WriteHeader(statusCode)
+		encoder:=json.NewEncoder(w)
+		encoder.Encode(data)
+}
+
 func getProducts(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin","*")
+		handleCors(w)
+		handlePreFlightReq(w,r)
+
 		if r.Method!= "GET"{
 			http.Error(w, "Method not allowed", 400)
 			return 
 		}
-		w.Header().Set("Content-Type", "application/json")
-		encoder:=json.NewEncoder(w)
-		encoder.Encode(productList)
+	sendData(w,productList,200)
+		
 } 
 
 
 func createProduct(w http.ResponseWriter, r *http.Request){
-		w.Header().Set("Access-Control-Allow-Origin","*")
-		w.Header().Set("Content-Type", "application/json")
+		handleCors(w)
+		handlePreFlightReq(w,r)
 		if r.Method!= "POST"{
 			http.Error(w, "Method not allowed", 400)
 			return 
@@ -72,14 +94,14 @@ func createProduct(w http.ResponseWriter, r *http.Request){
 		newProduct.ID= len(productList) +1
 
 		productList = append(productList, newProduct)
-		encoder:=json.NewEncoder(w)
-			encoder.Encode(newProduct)
+		
+		sendData(w,newProduct,201 )
 
 }
 
 func deleteProduct(w http.ResponseWriter, r *http.Request){
-    w.Header().Set("Access-Control-Allow-Origin","*")
-	w.Header().Set("Content-Type", "application/json")
+    handleCors(w)
+	handlePreFlightReq(w,r)
 	if r.Method!= "DELETE"{
 		http.Error(w, "Method not allowed", 400)
 		return 
@@ -95,7 +117,8 @@ func deleteProduct(w http.ResponseWriter, r *http.Request){
 		if p.ID ==id {
 			productList = append(productList[:i], productList[i+1:]...)
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]string{"message": "Product deleted successfully"})
+			
+			sendData(w,map[string]string{"message": "Product deleted successfully"},http.StatusOK )
 			return
 		}
 	}
@@ -105,9 +128,8 @@ func deleteProduct(w http.ResponseWriter, r *http.Request){
 
 
 func patchProduct(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Content-Type", "application/json")
-	
+	handleCors(w)
+	handlePreFlightReq(w,r)
 	if r.Method != http.MethodPatch {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed) // 405
 		return
@@ -147,7 +169,8 @@ func patchProduct(w http.ResponseWriter, r *http.Request) {
 				productList[i].Description = *updates.Description
 			}
 
-			json.NewEncoder(w).Encode(productList[i])
+			
+			sendData(w,productList[i],200)
 			return
 		}
 	}
