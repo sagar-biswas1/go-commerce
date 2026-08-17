@@ -20,6 +20,7 @@ func Serve(){
 	server:= &http.Server{
 		Addr:         ":8080",
 		Handler:      global_router.GlobalRouter(mux),
+
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  60 * time.Second,
