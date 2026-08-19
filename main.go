@@ -2,9 +2,10 @@ package main
 
 import (
 	"go-commerce/cmd"
+	"go-commerce/config"
 )
 
-
-func main(){
+func main() {
+	config.LoadConfig()
 	cmd.Serve()
 }
