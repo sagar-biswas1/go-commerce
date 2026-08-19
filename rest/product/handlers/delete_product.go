@@ -6,9 +6,9 @@ import (
 	"net/http"
 )
 
-func DeleteProduct(w http.ResponseWriter, r *http.Request){
+func DeleteProduct(w http.ResponseWriter, r *http.Request) {
 
-	id, ok:= productID(w, r)
+	id, ok := productID(w, r)
 	if !ok {
 		return
 	}

@@ -9,7 +9,7 @@ import (
 
 func PatchProduct(w http.ResponseWriter, r *http.Request) {
 
-	id, ok:= productID(w, r)
+	id, ok := productID(w, r)
 	if !ok {
 		return
 	}
@@ -28,19 +28,19 @@ func PatchProduct(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if updates.Title != nil {
-		if msg, valid:= validateTitle(*updates.Title); !valid {
+		if msg, valid := validateTitle(*updates.Title); !valid {
 			utils.SendError(w, msg, http.StatusUnprocessableEntity)
 			return
 		}
 	}
 	if updates.Price != nil {
-		if msg, valid:= validatePrice(*updates.Price); !valid {
+		if msg, valid := validatePrice(*updates.Price); !valid {
 			utils.SendError(w, msg, http.StatusUnprocessableEntity)
 			return
 		}
 	}
 
-	updated, found:= product.Update(id, func(p *product.Product){
+	updated, found := product.Update(id, func(p *product.Product) {
 		if updates.Title != nil {
 			p.Title = *updates.Title
 		}
