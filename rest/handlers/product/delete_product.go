@@ -1,19 +1,17 @@
-package productHandlers
+package product
 
 import (
-	product "go-commerce/database"
 	"go-commerce/utils"
 	"net/http"
 )
 
-func DeleteProduct(w http.ResponseWriter, r *http.Request) {
-
-	id, ok := productID(w, r)
+func (h *Handler) DeleteProduct(w http.ResponseWriter, r *http.Request) {
+	id, ok := h.productID(w, r)
 	if !ok {
 		return
 	}
 
-	if !product.Delete(id) {
+	if !h.store.Delete(id) {
 		utils.SendError(w, "Product not found", http.StatusNotFound)
 		return
 	}

@@ -1,60 +1,85 @@
 package config
 
 import (
-	"log"
+	"fmt"
 	"os"
 	"strconv"
+	"sync"
 
 	"github.com/joho/godotenv"
 )
 
-
-type Config struct{
-	Version string
+type Config struct {
+	Version     string
 	ServiceName string
-	HttpPort int
+	HttpPort    int
 }
 
-var config Config
-func LoadConfig(){
-	err:= godotenv.Load()
-	if err!=nil{
-		log.Fatal("Error while loading env")
-		os.Exit(1)
-	}
-	version := os.Getenv("VERSION")
-	if (version=="" ){
-		log.Fatal("Version not defined in env")
-		os.Exit(1)
+// The environment is read exactly once, however many times LoadConfig is
+// called. once caches the result -- and the failure -- so a second caller can
+// never re-parse .env or see a different answer than the first.
+var (
+	once   sync.Once
+	cfg    *Config
+	loaded error
+)
+
+// LoadConfig returns the process configuration, reading the environment on the
+// first call and returning the same pointer afterwards.
+//
+// This is the only way to obtain a Config, and it is meant to be called from
+// exactly one place -- main -- which then passes the pointer down as a
+// dependency. That is why there is no package-level getter: a package that
+// needs configuration receives it, instead of reaching back up for it.
+//
+// It reports an error rather than calling log.Fatal so the decision to end the
+// process stays with main, where it belongs.
+func LoadConfig() (*Config, error) {
+	once.Do(func() {
+		cfg, loaded = read()
+	})
+
+	return cfg, loaded
+}
+
+func read() (*Config, error) {
+	if err := godotenv.Load(); err != nil {
+		return nil, fmt.Errorf("loading .env: %w", err)
 	}
 
-	serviceName:= os.Getenv("SERVICE_NAME")
-	if (serviceName=="" ){
-		log.Fatal("Service Name not defined in env")
-		os.Exit(1)
+	version, err := required("VERSION")
+	if err != nil {
+		return nil, err
 	}
 
-	httpPort:=os.Getenv("HTTP_PORT")
-
-	if(httpPort==""){
-		log.Fatal("Port not defined in env")
-		os.Exit(1)
+	serviceName, err := required("SERVICE_NAME")
+	if err != nil {
+		return nil, err
 	}
 
-	port ,err := strconv.ParseInt(httpPort,10,64)
-	if(err !=nil){
-		log.Fatal("Port must be an integer")
-		os.Exit(1)
+	rawPort, err := required("HTTP_PORT")
+	if err != nil {
+		return nil, err
 	}
-	config =Config{
-		Version: version,
+
+	port, err := strconv.Atoi(rawPort)
+	if err != nil {
+		return nil, fmt.Errorf("HTTP_PORT must be an integer, got %q", rawPort)
+	}
+
+	return &Config{
+		Version:     version,
 		ServiceName: serviceName,
-		HttpPort: int(port),
-	}
-
-
+		HttpPort:    port,
+	}, nil
 }
 
-func GetConfig()Config{
-	return config
+// required reads an environment variable that has no sensible default.
+func required(key string) (string, error) {
+	value := os.Getenv(key)
+	if value == "" {
+		return "", fmt.Errorf("%s is not defined in the environment", key)
+	}
+
+	return value, nil
 }
