@@ -32,6 +32,13 @@ func (mngr *Manager) Then(handler http.HandlerFunc) http.HandlerFunc {
 	return chain(mngr.globalMiddlewares)(handler)
 }
 
+// ThenWith runs handler at the end of the global pipeline plus a set of
+// route-specific middlewares. The extras sit innermost -- closest to the
+// handler -- so the module pipeline still sees the request first.
+func (mngr *Manager) ThenWith(handler http.HandlerFunc, middlewares ...Middleware) http.HandlerFunc {
+	return mngr.Then(chain(middlewares)(handler))
+}
+
 // ThenHandler is Then for anything implementing http.Handler, such as a *http.ServeMux.
 func (mngr *Manager) ThenHandler(handler http.Handler) http.Handler {
 	return mngr.Then(handler.ServeHTTP)

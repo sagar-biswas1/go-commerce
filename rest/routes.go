@@ -1,10 +1,17 @@
 package rest
 
-import (
-	productHandlers "go-commerce/rest/product/handlers"
-)
+import "net/http"
 
-// registerRoutes mounts every resource on the server mux.
+// RouteRegistrar is anything that can mount itself on a mux. Each resource
+// package satisfies it with its own RegisterRoutes method, so the server
+// depends on this one-method interface rather than on the resources.
+type RouteRegistrar interface {
+	RegisterRoutes(mux *http.ServeMux)
+}
+
+// registerRoutes lets every injected resource mount its own route table.
 func (s *Server) registerRoutes() {
-	productHandlers.RegisterRoutes(s.mux)
+	for _, registrar := range s.registrars {
+		registrar.RegisterRoutes(s.mux)
+	}
 }

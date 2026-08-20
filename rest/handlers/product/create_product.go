@@ -1,16 +1,15 @@
-package productHandlers
+package product
 
 import (
 	"encoding/json"
-	product "go-commerce/database"
+	db "go-commerce/database"
 	"go-commerce/utils"
 	"net/http"
 	"strconv"
 )
 
-func CreateProduct(w http.ResponseWriter, r *http.Request) {
-
-	var newProduct product.Product
+func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
+	var newProduct db.Product
 
 	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&newProduct); err != nil {
@@ -27,7 +26,7 @@ func CreateProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	created := product.Create(newProduct)
+	created := h.store.Create(newProduct)
 	w.Header().Set("Location", "/products/"+strconv.Itoa(created.ID))
 	utils.SendData(w, created, http.StatusCreated)
 }

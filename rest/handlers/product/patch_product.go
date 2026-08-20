@@ -1,15 +1,14 @@
-package productHandlers
+package product
 
 import (
 	"encoding/json"
-	product "go-commerce/database"
+	db "go-commerce/database"
 	"go-commerce/utils"
 	"net/http"
 )
 
-func PatchProduct(w http.ResponseWriter, r *http.Request) {
-
-	id, ok := productID(w, r)
+func (h *Handler) PatchProduct(w http.ResponseWriter, r *http.Request) {
+	id, ok := h.productID(w, r)
 	if !ok {
 		return
 	}
@@ -40,7 +39,7 @@ func PatchProduct(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	updated, found := product.Update(id, func(p *product.Product) {
+	updated, found := h.store.Update(id, func(p *db.Product) {
 		if updates.Title != nil {
 			p.Title = *updates.Title
 		}
