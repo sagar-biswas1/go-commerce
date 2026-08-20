@@ -1,4 +1,4 @@
-package product
+package database
 
 import "sync"
 
@@ -22,8 +22,8 @@ type Store struct {
 	products []Product
 }
 
-// NewStore returns a store seeded with the demo catalogue.
-func NewStore() *Store {
+// NewProductStore returns a store seeded with the demo catalogue.
+func NewProductStore() *Store {
 	return &Store{
 		nextID: 4,
 		products: []Product{
