@@ -4,6 +4,7 @@ import (
 	"go-commerce/config"
 	db "go-commerce/database"
 	"go-commerce/rest"
+	auth "go-commerce/rest/handlers/auth"
 	product "go-commerce/rest/handlers/product"
 	"go-commerce/rest/handlers/user"
 	middleware "go-commerce/rest/middlewares"
@@ -26,14 +27,22 @@ func Serve(cfg *config.Config) {
 	userPipeline := middleware.NewManager()
 
 	productHandler := product.NewHandler(productStore, productPipeline)
+
 	userHandler := user.NewHandler(userStore, userPipeline)
+
+	refreshTokenStore := db.NewRefreshTokenStore()
+
+	authStore := auth.NewStore(userStore, refreshTokenStore)
+
+	authHandler := auth.NewHandler(authStore, middleware.NewManager())
+
 	// The global pipeline, applied to every request. The first middleware
 	// registered is the outermost, so Logger times the whole chain.
 	globalPipeline := middleware.NewManager().
 		Use(middleware.Logger).
 		Use(middleware.CorsWithPreflight)
 
-	server := rest.NewServer(cfg, globalPipeline, productHandler, userHandler)
+	server := rest.NewServer(cfg, globalPipeline, productHandler, userHandler, authHandler)
 
 	if err := server.Start(); err != nil {
 		log.Fatalf("Server failed to start: %v", err)

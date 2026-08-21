@@ -11,8 +11,8 @@ import (
 // that, which is middleware at the level of a single route.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /users", h.middlewares.Then(h.GetUsers))
-	mux.HandleFunc("POST /users", h.middlewares.ThenWith(h.CreateUser, middleware.RequireJSON))
+	mux.HandleFunc("POST /users", h.middlewares.ThenWith(h.CreateUser, middleware.RequireAuth, middleware.RequireJSON))
 	mux.HandleFunc("GET /users/{id}", h.middlewares.Then(h.GetUserById))
-	mux.HandleFunc("PATCH /users/{id}", h.middlewares.ThenWith(h.PatchUser, middleware.RequireJSON))
-	mux.HandleFunc("DELETE /users/{id}", h.middlewares.Then(h.DeleteUser))
+	mux.HandleFunc("PATCH /users/{id}", h.middlewares.ThenWith(h.PatchUser, middleware.RequireAuth, middleware.RequireJSON))
+	mux.HandleFunc("DELETE /users/{id}", h.middlewares.ThenWith(h.DeleteUser, middleware.RequireAuth))
 }
