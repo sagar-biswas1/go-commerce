@@ -10,9 +10,11 @@ import (
 )
 
 type Config struct {
-	Version     string
-	ServiceName string
-	HttpPort    int
+	Version          string
+	ServiceName      string
+	HttpPort         int
+	JWTAccessSecret  string
+	JWTRefreshSecret string
 }
 
 // The environment is read exactly once, however many times LoadConfig is
@@ -62,15 +64,27 @@ func read() (*Config, error) {
 		return nil, err
 	}
 
+	jwtAccessSecret, err := required("JWT_ACCESS_SECRET")
+	if err != nil {
+		return nil, err
+	}
+
+	jwtRefreshSecret, err := required("JWT_REFRESH_SECRET")
+	if err != nil {
+		return nil, err
+	}
+
 	port, err := strconv.Atoi(rawPort)
 	if err != nil {
 		return nil, fmt.Errorf("HTTP_PORT must be an integer, got %q", rawPort)
 	}
 
 	return &Config{
-		Version:     version,
-		ServiceName: serviceName,
-		HttpPort:    port,
+		Version:          version,
+		ServiceName:      serviceName,
+		HttpPort:         port,
+		JWTAccessSecret:  jwtAccessSecret,
+		JWTRefreshSecret: jwtRefreshSecret,
 	}, nil
 }
 

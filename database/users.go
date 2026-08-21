@@ -79,6 +79,18 @@ func (u *UserStore) ByID(id int) (User, bool) {
 	return User{}, false
 }
 
+func (u *UserStore) ByEmail(email string) (User, bool) {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+
+	for _, p := range u.users {
+		if p.Email == email {
+			return p, true
+		}
+	}
+	return User{}, false
+}
+
 func (u *UserStore) Create(p User) User {
 	u.mu.Lock()
 	defer u.mu.Unlock()
