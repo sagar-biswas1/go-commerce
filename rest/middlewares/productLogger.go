@@ -22,6 +22,7 @@ func (rec *statusRecorder) WriteHeader(status int) {
 // routes. It records what the global Logger has no business knowing: which
 // product the request addressed and how the module answered.
 func (m *Middlewares) ProductLogger(next http.HandlerFunc) http.HandlerFunc {
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 

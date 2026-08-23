@@ -2,7 +2,7 @@ package product
 
 import (
 	"encoding/json"
-	db "go-commerce/database"
+	"go-commerce/repo"
 	"go-commerce/utils"
 	"net/http"
 )
@@ -39,7 +39,7 @@ func (h *Handler) PatchProduct(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	updated, found := h.store.Update(id, func(p *db.Product) {
+	updated, found := h.store.Update(id, func(p *repo.Product) {
 		if updates.Title != nil {
 			p.Title = *updates.Title
 		}

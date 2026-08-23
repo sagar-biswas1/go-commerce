@@ -25,7 +25,8 @@ type Server struct {
 // listen with, the global pipeline to wrap every request in, and the resources
 // to mount. Adding a resource means passing one more registrar here, with no
 // edit to this file.
-func NewServer(cfg *config.Config, globalMiddlewares *middlewares.Manager, registrars ...RouteRegistrar) *Server {
+func NewServer(globalMiddlewares *middlewares.Manager, registrars ...RouteRegistrar) *Server {
+	cfg := config.GetConfig()
 	server := Server{
 		config:            cfg,
 		globalMiddlewares: globalMiddlewares,

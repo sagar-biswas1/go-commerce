@@ -2,14 +2,14 @@ package product
 
 import (
 	"encoding/json"
-	db "go-commerce/database"
+	"go-commerce/repo"
 	"go-commerce/utils"
 	"net/http"
 	"strconv"
 )
 
 func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
-	var newProduct db.Product
+	var newProduct repo.Product
 
 	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&newProduct); err != nil {

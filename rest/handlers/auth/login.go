@@ -52,15 +52,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		ExpiresAt: expiresAt,
 	})
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     "refresh_token",
-		Value:    refreshTokenStr,
-		Expires:  expiresAt,
-		HttpOnly: true,
-		Secure:   false,
-		SameSite: http.SameSiteLaxMode,
-		Path:     "/auth/refresh",
-	})
+	setRefreshTokenCookie(w, refreshTokenStr, expiresAt)
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(map[string]any{

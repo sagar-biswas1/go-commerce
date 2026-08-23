@@ -5,6 +5,7 @@ import (
 	"go-commerce/config"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -24,10 +25,29 @@ type JWTHelper struct {
 	cfg *config.Config
 }
 
-func NewJWTHelper(cfg *config.Config) *JWTHelper {
-	return &JWTHelper{
-		cfg: cfg,
+// Singleton variables
+var (
+	instance *JWTHelper
+	once     sync.Once
+)
+
+// GetJWTHelper returns the singleton instance of JWTHelper.
+// It requires the config on its first call to initialize the helper.
+func GetJWTHelper(cfg *config.Config) *JWTHelper {
+	once.Do(func() {
+		instance = &JWTHelper{
+			cfg: cfg,
+		}
+	})
+	return instance
+}
+
+// (Optional) If you already initialized it elsewhere and just want the instance without passing config again:
+func Instance() *JWTHelper {
+	if instance == nil {
+		panic("JWTHelper is not initialized. Call GetJWTHelper(cfg) first.")
 	}
+	return instance
 }
 
 func (c *JWTHelper) accessTokenSecret() []byte {
@@ -35,7 +55,6 @@ func (c *JWTHelper) accessTokenSecret() []byte {
 }
 
 func (c *JWTHelper) refreshTokenSecret() []byte {
-
 	return []byte(strings.TrimSpace(c.cfg.JWTRefreshSecret))
 }
 
@@ -77,7 +96,6 @@ func (c *JWTHelper) GenerateRefreshToken(userID int) (string, time.Time, error) 
 
 // ParseAccessToken validates an access token and returns its claims.
 func (c *JWTHelper) ParseAccessToken(tokenStr string) (*Claims, error) {
-
 	claims := &Claims{}
 	token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (interface{}, error) {
 		return c.accessTokenSecret(), nil
@@ -94,7 +112,6 @@ func itoa(i int) string {
 
 // ParseRefreshToken validates a refresh token and returns the user ID.
 func (c *JWTHelper) ParseRefreshToken(tokenStr string) (int, error) {
-
 	claims := &jwt.RegisteredClaims{}
 	token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (interface{}, error) {
 		return c.refreshTokenSecret(), nil

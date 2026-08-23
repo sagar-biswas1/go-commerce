@@ -38,7 +38,7 @@ func (h *Handler) PatchUser(w http.ResponseWriter, r *http.Request) {
 		utils.SendError(w, utils.StringifyErrors(v.Errors), http.StatusBadRequest)
 		return
 	}
-
+	// log.Printf("Payload: %+v\n", updates)
 	updated, found := h.userStore.Update(id, func(u *db.User) {
 		if updates.Email != nil {
 			u.Email = *updates.Email

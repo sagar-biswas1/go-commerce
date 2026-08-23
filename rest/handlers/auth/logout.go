@@ -2,29 +2,16 @@ package auth
 
 import (
 	"net/http"
-	"time"
 )
 
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
-	cookie, err := r.Cookie("refresh_token")
-	if err == nil && cookie != nil {
-		if tokenStr := cookie.Value; tokenStr != "" {
-			if _, err := h.jwtHelper.ParseRefreshToken(tokenStr); err == nil {
-				_ = h.authStore.RevokeRefreshToken(tokenStr)
-			}
+	if tokenStr, err := refreshTokenFromRequest(r); err == nil && tokenStr != "" {
+		if _, err := h.jwtHelper.ParseRefreshToken(tokenStr); err == nil {
+			_ = h.authStore.RevokeRefreshToken(tokenStr)
 		}
 	}
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     "refresh_token",
-		Value:    "",
-		Path:     "/auth/refresh",
-		Expires:  time.Unix(0, 0).UTC(),
-		MaxAge:   -1,
-		HttpOnly: true,
-		Secure:   false,
-		SameSite: http.SameSiteLaxMode,
-	})
+	clearRefreshTokenCookie(w)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)

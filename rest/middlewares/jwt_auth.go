@@ -18,21 +18,25 @@ type AuthenticatedUser struct {
 }
 
 func (m *Middlewares) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
+	jwtHelpers := helpers.GetJWTHelper(m.cfg)
+
 	return func(w http.ResponseWriter, r *http.Request) {
-		authorization := r.Header.Get("Authorization")
+
+		authorization := strings.TrimSpace(r.Header.Get("Authorization"))
 		if authorization == "" {
 			http.Error(w, "Missing authorization token", http.StatusUnauthorized)
 			return
 		}
 
-		parts := strings.SplitN(authorization, " ", 2)
-		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		scheme, token, found := strings.Cut(authorization, " ")
+		if !found || !strings.EqualFold(scheme, "Bearer") || strings.TrimSpace(token) == "" {
 			http.Error(w, "Invalid authorization header", http.StatusUnauthorized)
 			return
 		}
-		jwtHelpers := helpers.NewJWTHelper(m.cfg)
-		claims, err := jwtHelpers.ParseAccessToken(parts[1])
+
+		claims, err := jwtHelpers.ParseAccessToken(token)
 		if err != nil {
+
 			http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
 			return
 		}

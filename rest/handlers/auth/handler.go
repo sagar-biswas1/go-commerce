@@ -72,6 +72,6 @@ func NewHandler(cfg *config.Config, authStore AuthStore, moduleMiddlewares *midd
 	return &Handler{
 		authStore:   authStore,
 		middlewares: moduleMiddlewares,
-		jwtHelper:   helpers.NewJWTHelper(cfg),
+		jwtHelper:   helpers.GetJWTHelper(cfg),
 	}
 }
