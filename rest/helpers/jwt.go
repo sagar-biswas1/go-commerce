@@ -3,9 +3,9 @@ package helpers
 import (
 	"errors"
 	"go-commerce/config"
-	"log"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -21,20 +21,41 @@ var (
 	ErrInvalidToken = errors.New("invalid or expired token")
 )
 
-func accessTokenSecret() []byte {
-	cfg, err := config.LoadConfig()
-	if err != nil {
-		log.Fatalf("Config failed to load: %v", err)
-	}
-	return []byte(strings.TrimSpace(cfg.JWTAccessSecret))
+type JWTHelper struct {
+	cfg *config.Config
 }
 
-func refreshTokenSecret() []byte {
-	cfg, err := config.LoadConfig()
-	if err != nil {
-		log.Fatalf("Config failed to load: %v", err)
+// Singleton variables
+var (
+	instance *JWTHelper
+	once     sync.Once
+)
+
+// GetJWTHelper returns the singleton instance of JWTHelper.
+// It requires the config on its first call to initialize the helper.
+func GetJWTHelper(cfg *config.Config) *JWTHelper {
+	once.Do(func() {
+		instance = &JWTHelper{
+			cfg: cfg,
+		}
+	})
+	return instance
+}
+
+// (Optional) If you already initialized it elsewhere and just want the instance without passing config again:
+func Instance() *JWTHelper {
+	if instance == nil {
+		panic("JWTHelper is not initialized. Call GetJWTHelper(cfg) first.")
 	}
-	return []byte(strings.TrimSpace(cfg.JWTRefreshSecret))
+	return instance
+}
+
+func (c *JWTHelper) accessTokenSecret() []byte {
+	return []byte(strings.TrimSpace(c.cfg.JWTAccessSecret))
+}
+
+func (c *JWTHelper) refreshTokenSecret() []byte {
+	return []byte(strings.TrimSpace(c.cfg.JWTRefreshSecret))
 }
 
 type Claims struct {
@@ -44,7 +65,7 @@ type Claims struct {
 }
 
 // GenerateAccessToken creates a short-lived JWT for authenticating requests.
-func GenerateAccessToken(userID int, role string) (string, error) {
+func (c *JWTHelper) GenerateAccessToken(userID int, role string) (string, error) {
 	claims := Claims{
 		UserID: userID,
 		Role:   role,
@@ -55,11 +76,11 @@ func GenerateAccessToken(userID int, role string) (string, error) {
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(accessTokenSecret())
+	return token.SignedString(c.accessTokenSecret())
 }
 
 // GenerateRefreshToken creates a longer-lived JWT used for session renewal.
-func GenerateRefreshToken(userID int) (string, time.Time, error) {
+func (c *JWTHelper) GenerateRefreshToken(userID int) (string, time.Time, error) {
 	expiresAt := time.Now().Add(RefreshTokenTTL)
 
 	claims := jwt.RegisteredClaims{
@@ -69,16 +90,15 @@ func GenerateRefreshToken(userID int) (string, time.Time, error) {
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signed, err := token.SignedString(refreshTokenSecret())
+	signed, err := token.SignedString(c.refreshTokenSecret())
 	return signed, expiresAt, err
 }
 
 // ParseAccessToken validates an access token and returns its claims.
-func ParseAccessToken(tokenStr string) (*Claims, error) {
-
+func (c *JWTHelper) ParseAccessToken(tokenStr string) (*Claims, error) {
 	claims := &Claims{}
 	token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (interface{}, error) {
-		return accessTokenSecret(), nil
+		return c.accessTokenSecret(), nil
 	})
 	if err != nil || !token.Valid {
 		return nil, ErrInvalidToken
@@ -91,11 +111,10 @@ func itoa(i int) string {
 }
 
 // ParseRefreshToken validates a refresh token and returns the user ID.
-func ParseRefreshToken(tokenStr string) (int, error) {
-
+func (c *JWTHelper) ParseRefreshToken(tokenStr string) (int, error) {
 	claims := &jwt.RegisteredClaims{}
 	token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (interface{}, error) {
-		return refreshTokenSecret(), nil
+		return c.refreshTokenSecret(), nil
 	})
 	if err != nil || !token.Valid {
 		return 0, ErrInvalidToken

@@ -1,4 +1,4 @@
-package middleware
+package middlewares
 
 import (
 	"mime"
@@ -9,7 +9,7 @@ import (
 // RequireJSON rejects request bodies that are not JSON. It is a route-level
 // middleware: it belongs on the routes that actually read a body (POST, PATCH),
 // not on a whole module, so it is attached per route via Manager.ThenWith.
-func RequireJSON(next http.HandlerFunc) http.HandlerFunc {
+func (m *Middlewares) RequireJSON(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ct := r.Header.Get("Content-Type")
 		if ct == "" {

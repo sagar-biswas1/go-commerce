@@ -97,3 +97,10 @@ func required(key string) (string, error) {
 
 	return value, nil
 }
+
+func GetConfig() *Config {
+	if cfg == nil {
+		LoadConfig()
+	}
+	return cfg
+}

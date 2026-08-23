@@ -1,47 +1,91 @@
-package middleware
+package middlewares
 
-import "net/http"
+import (
+	"net/http"
+)
 
 type Middleware func(http.HandlerFunc) http.HandlerFunc
 
+// Manager represents a composable middleware pipeline. It is intentionally
+// reusable: one instance can be used as the global server pipeline, while
+// another can be configured per module or route.
 type Manager struct {
-	globalMiddlewares []Middleware
+	middlewares *Middlewares
+	stack       []Middleware
 }
 
-func NewManager() *Manager {
-	manager := Manager{
-		globalMiddlewares: make([]Middleware, 0),
+func (m *Middlewares) NewManager(middlewares ...Middleware) *Manager {
+	manager := &Manager{
+		middlewares: m,
+		stack:       make([]Middleware, 0, len(middlewares)),
 	}
-	return &manager
+	manager.Use(middlewares...)
+	return manager
 }
 
-// Use appends middlewares to the global pipeline. The first one registered
-// is the outermost, so it sees the request first and the response last.
+// Use appends middleware to the current pipeline. The first middleware added is
+// the outermost in the chain, so it sees the request first and the response last.
 func (mngr *Manager) Use(middlewares ...Middleware) *Manager {
-	mngr.globalMiddlewares = append(mngr.globalMiddlewares, middlewares...)
+	mngr.stack = append(mngr.stack, middlewares...)
 	return mngr
 }
 
-// With builds a one-off pipeline from the given middlewares, ignoring the globals.
+// With creates a one-off pipeline from the provided middleware list without
+// mutating the current manager.
 func (mngr *Manager) With(middlewares ...Middleware) Middleware {
 	return chain(middlewares)
 }
 
-// Then runs handler at the end of the global pipeline.
+// Then runs the handler through the manager's pipeline.
 func (mngr *Manager) Then(handler http.HandlerFunc) http.HandlerFunc {
-	return chain(mngr.globalMiddlewares)(handler)
+	return chain(mngr.stack)(handler)
 }
 
-// ThenWith runs handler at the end of the global pipeline plus a set of
-// route-specific middlewares. The extras sit innermost -- closest to the
-// handler -- so the module pipeline still sees the request first.
+// ThenWith runs the handler through the manager's pipeline and then attaches
+// route-specific middleware, which sits closest to the handler.
 func (mngr *Manager) ThenWith(handler http.HandlerFunc, middlewares ...Middleware) http.HandlerFunc {
-	return mngr.Then(chain(middlewares)(handler))
+	pipeline := append(append([]Middleware{}, mngr.stack...), middlewares...)
+	return chain(pipeline)(handler)
 }
 
 // ThenHandler is Then for anything implementing http.Handler, such as a *http.ServeMux.
 func (mngr *Manager) ThenHandler(handler http.Handler) http.Handler {
 	return mngr.Then(handler.ServeHTTP)
+}
+
+func (mngr *Manager) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
+	if mngr == nil || mngr.middlewares == nil {
+		return next
+	}
+	return mngr.middlewares.RequireAuth(next)
+}
+
+func (mngr *Manager) RequireJSON(next http.HandlerFunc) http.HandlerFunc {
+	if mngr == nil || mngr.middlewares == nil {
+		return next
+	}
+	return mngr.middlewares.RequireJSON(next)
+}
+
+func (mngr *Manager) Logger(next http.HandlerFunc) http.HandlerFunc {
+	if mngr == nil || mngr.middlewares == nil {
+		return next
+	}
+	return mngr.middlewares.Logger(next)
+}
+
+func (mngr *Manager) ProductLogger(next http.HandlerFunc) http.HandlerFunc {
+	if mngr == nil || mngr.middlewares == nil {
+		return next
+	}
+	return mngr.middlewares.ProductLogger(next)
+}
+
+func (mngr *Manager) CorsWithPreflight(next http.HandlerFunc) http.HandlerFunc {
+	if mngr == nil || mngr.middlewares == nil {
+		return next
+	}
+	return mngr.middlewares.CorsWithPreflight(next)
 }
 
 func chain(middlewares []Middleware) Middleware {
