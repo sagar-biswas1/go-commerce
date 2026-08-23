@@ -1,4 +1,4 @@
-package middleware
+package middlewares
 
 import (
 	"log"
@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func Logger(next http.HandlerFunc) http.HandlerFunc {
+func (m *Middlewares) Logger(next http.HandlerFunc) http.HandlerFunc {
 	logger := func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 

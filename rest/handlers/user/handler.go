@@ -2,7 +2,7 @@ package user
 
 import (
 	db "go-commerce/database"
-	middleware "go-commerce/rest/middlewares"
+	middlewares "go-commerce/rest/middlewares"
 )
 
 type UserStore interface {
@@ -15,16 +15,12 @@ type UserStore interface {
 
 type Handler struct {
 	userStore   UserStore
-	middlewares *middleware.Manager
+	middlewares *middlewares.Manager
 }
 
-func NewHandler(userStore UserStore, middlewares *middleware.Manager) *Handler {
-	if middlewares == nil {
-		middlewares = middleware.NewManager()
-	}
-
+func NewHandler(userStore UserStore, moduleMiddlewares *middlewares.Manager) *Handler {
 	return &Handler{
 		userStore:   userStore,
-		middlewares: middlewares,
+		middlewares: moduleMiddlewares,
 	}
 }

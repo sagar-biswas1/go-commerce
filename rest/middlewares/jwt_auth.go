@@ -1,4 +1,4 @@
-package middleware
+package middlewares
 
 import (
 	"context"
@@ -17,7 +17,7 @@ type AuthenticatedUser struct {
 	Role   string
 }
 
-func RequireAuth(next http.HandlerFunc) http.HandlerFunc {
+func (m *Middlewares) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		authorization := r.Header.Get("Authorization")
 		if authorization == "" {
@@ -30,8 +30,8 @@ func RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 			http.Error(w, "Invalid authorization header", http.StatusUnauthorized)
 			return
 		}
-
-		claims, err := helpers.ParseAccessToken(parts[1])
+		jwtHelpers := helpers.NewJWTHelper(m.cfg)
+		claims, err := jwtHelpers.ParseAccessToken(parts[1])
 		if err != nil {
 			http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
 			return

@@ -1,7 +1,6 @@
 package user
 
 import (
-	middleware "go-commerce/rest/middlewares"
 	"net/http"
 )
 
@@ -11,8 +10,8 @@ import (
 // that, which is middleware at the level of a single route.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /users", h.middlewares.Then(h.GetUsers))
-	mux.HandleFunc("POST /users", h.middlewares.ThenWith(h.CreateUser, middleware.RequireAuth, middleware.RequireJSON))
+	// mux.HandleFunc("POST /users", h.middlewares.ThenWith(h.CreateUser, h.middlewares.RequireAuth, h.middlewares.RequireJSON))
 	mux.HandleFunc("GET /users/{id}", h.middlewares.Then(h.GetUserById))
-	mux.HandleFunc("PATCH /users/{id}", h.middlewares.ThenWith(h.PatchUser, middleware.RequireAuth, middleware.RequireJSON))
-	mux.HandleFunc("DELETE /users/{id}", h.middlewares.ThenWith(h.DeleteUser, middleware.RequireAuth))
+	mux.HandleFunc("PATCH /users/{id}", h.middlewares.ThenWith(h.PatchUser, h.middlewares.RequireAuth, h.middlewares.RequireJSON))
+	mux.HandleFunc("DELETE /users/{id}", h.middlewares.ThenWith(h.DeleteUser, h.middlewares.RequireAuth))
 }

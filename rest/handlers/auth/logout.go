@@ -3,15 +3,13 @@ package auth
 import (
 	"net/http"
 	"time"
-
-	helpers "go-commerce/rest/helpers"
 )
 
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("refresh_token")
 	if err == nil && cookie != nil {
 		if tokenStr := cookie.Value; tokenStr != "" {
-			if _, err := helpers.ParseRefreshToken(tokenStr); err == nil {
+			if _, err := h.jwtHelper.ParseRefreshToken(tokenStr); err == nil {
 				_ = h.authStore.RevokeRefreshToken(tokenStr)
 			}
 		}

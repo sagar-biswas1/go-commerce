@@ -1,8 +1,8 @@
-package middleware
+package middlewares
 
 import "net/http"
 
-func HandleCorsMiddleware(next http.HandlerFunc) http.HandlerFunc {
+func (m *Middlewares) HandleCorsMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	handleCors := func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")

@@ -2,10 +2,10 @@ package auth
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 
 	db "go-commerce/database"
-	helpers "go-commerce/rest/helpers"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -15,30 +15,32 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
-
+	log.Printf("Payload: %+v\n", req)
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
 
 	user, ok := h.authStore.ByEmail(req.Email)
+
 	if !ok {
 		http.Error(w, "Invalid email or password", http.StatusUnauthorized)
 		return
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
+		log.Printf("Payload: %+v\n", err)
 		http.Error(w, "Invalid email or password", http.StatusUnauthorized)
 		return
 	}
 
-	accessToken, err := helpers.GenerateAccessToken(user.ID, user.Role)
+	accessToken, err := h.jwtHelper.GenerateAccessToken(user.ID, user.Role)
 	if err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
-	refreshTokenStr, expiresAt, err := helpers.GenerateRefreshToken(user.ID)
+	refreshTokenStr, expiresAt, err := h.jwtHelper.GenerateRefreshToken(user.ID)
 	if err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return

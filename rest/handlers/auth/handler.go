@@ -1,8 +1,10 @@
 package auth
 
 import (
+	"go-commerce/config"
 	db "go-commerce/database"
-	middleware "go-commerce/rest/middlewares"
+	"go-commerce/rest/helpers"
+	middlewares "go-commerce/rest/middlewares"
 )
 
 type AuthStore interface {
@@ -62,16 +64,14 @@ func (s *Store) RevokeRefreshToken(token string) error {
 
 type Handler struct {
 	authStore   AuthStore
-	middlewares *middleware.Manager
+	middlewares *middlewares.Manager
+	jwtHelper   *helpers.JWTHelper
 }
 
-func NewHandler(authStore AuthStore, middlewares *middleware.Manager) *Handler {
-	if middlewares == nil {
-		middlewares = middleware.NewManager()
-	}
-
+func NewHandler(cfg *config.Config, authStore AuthStore, moduleMiddlewares *middlewares.Manager) *Handler {
 	return &Handler{
 		authStore:   authStore,
-		middlewares: middlewares,
+		middlewares: moduleMiddlewares,
+		jwtHelper:   helpers.NewJWTHelper(cfg),
 	}
 }
