@@ -1,31 +1,52 @@
 package user
 
 import (
-	"encoding/json"
-	db "go-commerce/database"
-	"go-commerce/utils"
 	"net/http"
-	"strconv"
+
+	"go-commerce/domain"
+	"go-commerce/rest/helpers"
+	"go-commerce/rest/response"
 )
 
+// createRequest is an admin-side user creation.
+//
+// Role and status are accepted here, unlike on public registration, because this
+// route is behind an admin gate -- creating a colleague with the staff role is
+// the point of it.
+type createRequest struct {
+	Email       string  `json:"email"`
+	Password    string  `json:"password"`
+	FirstName   string  `json:"firstName"`
+	LastName    string  `json:"lastName"`
+	AvatarURL   *string `json:"avatarUrl"`
+	PhoneNumber *string `json:"phoneNumber"`
+	Role        string  `json:"role"`
+	Status      string  `json:"status"`
+}
+
 func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
-	var newUser db.User
-
-	decoder := json.NewDecoder(r.Body)
-	if err := decoder.Decode(&newUser); err != nil {
-		utils.SendError(w, "Invalid JSON payload", http.StatusBadRequest)
+	var body createRequest
+	if err := helpers.DecodeJSON(w, r, &body); err != nil {
+		response.Fail(w, r, err)
 		return
 	}
 
-	v := NewUserValidator()
-
-	if !v.ValidateFull(newUser) {
-
-		utils.SendError(w, utils.StringifyErrors(v.Errors), http.StatusBadRequest)
+	created, err := h.service.Create(r.Context(), &domain.UserCreateInput{
+		Email:       body.Email,
+		Password:    body.Password,
+		FirstName:   body.FirstName,
+		LastName:    body.LastName,
+		AvatarURL:   body.AvatarURL,
+		PhoneNumber: body.PhoneNumber,
+		Role:        body.Role,
+		Status:      body.Status,
+	})
+	if err != nil {
+		response.Fail(w, r, err)
 		return
 	}
 
-	created := h.userStore.Create(newUser)
-	w.Header().Set("Location", "/users/"+strconv.Itoa(created.ID))
-	utils.SendData(w, created, http.StatusCreated)
+	links := userLinks(created)
+	w.Header().Set("Location", links["self"])
+	response.Item(w, http.StatusCreated, created, links)
 }

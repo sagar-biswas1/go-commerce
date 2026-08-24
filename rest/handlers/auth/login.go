@@ -1,68 +1,35 @@
 package auth
 
 import (
-	"encoding/json"
-	"log"
 	"net/http"
 
-	db "go-commerce/database"
-
-	"golang.org/x/crypto/bcrypt"
+	"go-commerce/rest/helpers"
+	"go-commerce/rest/response"
 )
 
+type loginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+// Login exchanges credentials for a token pair.
+//
+// Nothing about the request body is logged. The old handler printed the decoded
+// payload, which put every password in plaintext into the server log -- the one
+// place they are guaranteed to be kept, backed up, and read by people.
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
-	}
-	log.Printf("Payload: %+v\n", req)
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+	var body loginRequest
+	if err := helpers.DecodeJSON(w, r, &body); err != nil {
+		response.Fail(w, r, err)
 		return
 	}
 
-	user, ok := h.authStore.ByEmail(req.Email)
-
-	if !ok {
-		http.Error(w, "Invalid email or password", http.StatusUnauthorized)
-		return
-	}
-
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
-		log.Printf("Payload: %+v\n", err)
-		http.Error(w, "Invalid email or password", http.StatusUnauthorized)
-		return
-	}
-
-	accessToken, err := h.jwtHelper.GenerateAccessToken(user.ID, user.Role)
+	user, pair, err := h.service.Login(r.Context(), body.Email, body.Password, sessionContext(r))
 	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		response.Fail(w, r, err)
 		return
 	}
 
-	refreshTokenStr, expiresAt, err := h.jwtHelper.GenerateRefreshToken(user.ID)
-	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	h.authStore.CreateRefreshToken(db.RefreshToken{
-		UserID:    user.ID,
-		Token:     refreshTokenStr,
-		ExpiresAt: expiresAt,
-	})
-
-	setRefreshTokenCookie(w, refreshTokenStr, expiresAt)
-
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(map[string]any{
-		"access_token": accessToken,
-		"user": map[string]any{
-			"id":    user.ID,
-			"email": user.Email,
-			"role":  user.Role,
-		},
-	}); err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-	}
+	h.setRefreshTokenCookie(w, pair.RefreshToken, pair.RefreshExpiresAt)
+	response.Item(w, http.StatusOK, newSessionPayload(user, pair), sessionLinks())
 }

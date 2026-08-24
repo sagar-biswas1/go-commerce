@@ -1,63 +1,46 @@
 package product
 
 import (
-	"encoding/json"
-	"go-commerce/repo"
-	"go-commerce/utils"
 	"net/http"
+
+	"go-commerce/domain"
+	"go-commerce/rest/helpers"
+	"go-commerce/rest/response"
 )
 
+// patchRequest is a partial update. The pointers are what tell "field omitted"
+// apart from "field set to its zero value": without them, a body that says
+// nothing about price and one that sets price to 0 arrive identical.
+type patchRequest struct {
+	Title       *string  `json:"title"`
+	Price       *float64 `json:"price"`
+	ImgUrl      *string  `json:"imageUrl"`
+	Description *string  `json:"description"`
+}
+
 func (h *Handler) PatchProduct(w http.ResponseWriter, r *http.Request) {
-	id, ok := h.productID(w, r)
-	if !ok {
+	id, err := helpers.PathUUID(r, "id")
+	if err != nil {
+		response.Fail(w, r, err)
 		return
 	}
 
-	// Pointers let us tell "field omitted" apart from "field set to zero".
-	var updates struct {
-		Title       *string  `json:"title"`
-		Price       *float64 `json:"price"`
-		ImgUrl      *string  `json:"imageUrl"`
-		Description *string  `json:"description"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
-		utils.SendError(w, "Invalid JSON payload", http.StatusBadRequest)
+	var body patchRequest
+	if err := helpers.DecodeJSON(w, r, &body); err != nil {
+		response.Fail(w, r, err)
 		return
 	}
 
-	if updates.Title != nil {
-		if msg, valid := validateTitle(*updates.Title); !valid {
-			utils.SendError(w, msg, http.StatusUnprocessableEntity)
-			return
-		}
-	}
-	if updates.Price != nil {
-		if msg, valid := validatePrice(*updates.Price); !valid {
-			utils.SendError(w, msg, http.StatusUnprocessableEntity)
-			return
-		}
-	}
-
-	updated, found := h.store.Update(id, func(p *repo.Product) {
-		if updates.Title != nil {
-			p.Title = *updates.Title
-		}
-		if updates.Price != nil {
-			p.Price = *updates.Price
-		}
-		if updates.ImgUrl != nil {
-			p.ImgUrl = *updates.ImgUrl
-		}
-		if updates.Description != nil {
-			p.Description = *updates.Description
-		}
+	updated, err := h.service.Update(r.Context(), id, &domain.ProductPatch{
+		Title:       body.Title,
+		Price:       body.Price,
+		ImgUrl:      body.ImgUrl,
+		Description: body.Description,
 	})
-
-	if !found {
-		utils.SendError(w, "Product not found", http.StatusNotFound)
+	if err != nil {
+		response.Fail(w, r, err)
 		return
 	}
 
-	utils.SendData(w, updated, http.StatusOK)
+	response.Item(w, http.StatusOK, updated, productLinks(updated))
 }

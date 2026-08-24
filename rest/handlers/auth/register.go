@@ -1,69 +1,49 @@
 package auth
 
 import (
-	"encoding/json"
 	"net/http"
-	"strings"
 
-	db "go-commerce/database"
-
-	"golang.org/x/crypto/bcrypt"
+	"go-commerce/domain"
+	"go-commerce/rest/helpers"
+	"go-commerce/rest/response"
 )
 
+// registerRequest is a public registration.
+//
+// There is no role field, and that is the point. The old handler accepted one and
+// honoured it, so anyone could register as an admin by adding a line to the body.
+// A new account is always an ordinary user; promoting one is an admin action on
+// /users/{id}.
+type registerRequest struct {
+	FirstName string `json:"firstName"`
+	LastName  string `json:"lastName"`
+	Email     string `json:"email"`
+	Password  string `json:"password"`
+}
+
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		FirstName string `json:"firstName"`
-		LastName  string `json:"lastName"`
-		Email     string `json:"email"`
-		Password  string `json:"password"`
-		Role      string `json:"role"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+	var body registerRequest
+	if err := helpers.DecodeJSON(w, r, &body); err != nil {
+		response.Fail(w, r, err)
 		return
 	}
 
-	req.Email = strings.TrimSpace(req.Email)
-	req.FirstName = strings.TrimSpace(req.FirstName)
-	req.LastName = strings.TrimSpace(req.LastName)
-	if req.Email == "" || req.Password == "" {
-		http.Error(w, "Email and password are required", http.StatusBadRequest)
-		return
-	}
-
-	if _, ok := h.authStore.ByEmail(req.Email); ok {
-		http.Error(w, "User already exists", http.StatusConflict)
-		return
-	}
-
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	created, err := h.service.Register(r.Context(), &domain.RegisterInput{
+		FirstName: body.FirstName,
+		LastName:  body.LastName,
+		Email:     body.Email,
+		Password:  body.Password,
+	})
 	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		response.Fail(w, r, err)
 		return
 	}
 
-	user := db.User{
-		Email:           req.Email,
-		Password:        string(hashedPassword),
-		FirstName:       req.FirstName,
-		LastName:        req.LastName,
-		Role:            "user",
-		Status:          "active",
-		IsEmailVerified: false,
-	}
-	if req.Role != "" {
-		user.Role = req.Role
-	}
-
-	created := h.authStore.CreateUser(user)
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	if err := json.NewEncoder(w).Encode(map[string]any{
-		"id":    created.ID,
-		"email": created.Email,
-		"role":  created.Role,
-	}); err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-	}
+	// Registration does not sign the user in: no tokens are minted here, so a
+	// client has to log in with the credentials it just chose and prove they
+	// work.
+	response.Item(w, http.StatusCreated, created, response.Links{
+		"self":  response.Path("/users", created.ID.String()),
+		"login": basePath + "/login",
+	})
 }

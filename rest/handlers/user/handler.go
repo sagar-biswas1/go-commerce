@@ -1,26 +1,22 @@
+// Package user is the HTTP transport for the user resource.
 package user
 
 import (
-	db "go-commerce/database"
 	middlewares "go-commerce/rest/middlewares"
 )
 
-type UserStore interface {
-	All() []db.User
-	ByID(id int) (db.User, bool)
-	Create(p db.User) db.User
-	Update(id int, apply func(*db.User)) (db.User, bool)
-	Delete(id int) bool
-}
-
+// Handler serves the user resource. Its service and its middleware pipeline are
+// both handed to it at construction, which is what lets a test drive it with a
+// fake service and no database. A nil pipeline means "no module middleware", not
+// a panic at the first request.
 type Handler struct {
-	userStore   UserStore
+	service     Service
 	middlewares *middlewares.Manager
 }
 
-func NewHandler(userStore UserStore, moduleMiddlewares *middlewares.Manager) *Handler {
+func NewHandler(service Service, moduleMiddlewares *middlewares.Manager) *Handler {
 	return &Handler{
-		userStore:   userStore,
+		service:     service,
 		middlewares: moduleMiddlewares,
 	}
 }

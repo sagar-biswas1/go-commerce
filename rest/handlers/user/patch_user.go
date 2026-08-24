@@ -1,16 +1,22 @@
 package user
 
 import (
-	"encoding/json"
-	db "go-commerce/database"
-	"go-commerce/utils"
 	"net/http"
-	"time"
+
+	"go-commerce/domain"
+	"go-commerce/rest/helpers"
+	"go-commerce/rest/middlewares"
+	"go-commerce/rest/response"
 )
 
-// UserPatch mirrors db.User for PATCH bodies. Pointers let us tell
-// "field omitted" apart from "field set to zero".
-type UserPatch struct {
+// patchRequest mirrors the updatable fields. Pointers tell an omitted field
+// apart from one set to its zero value.
+//
+// Role, status and isEmailVerified are accepted from any caller and then refused
+// by the service unless that caller is an admin. Rejecting them here instead
+// would put an authorization rule in the transport layer, where the next
+// endpoint that touches a user would have to reimplement it.
+type patchRequest struct {
 	Email           *string `json:"email"`
 	FirstName       *string `json:"firstName"`
 	LastName        *string `json:"lastName"`
@@ -22,55 +28,32 @@ type UserPatch struct {
 }
 
 func (h *Handler) PatchUser(w http.ResponseWriter, r *http.Request) {
-	id, ok := h.userID(w, r)
-	if !ok {
+	id, err := helpers.PathUUID(r, "id")
+	if err != nil {
+		response.Fail(w, r, err)
 		return
 	}
 
-	var updates UserPatch
-	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
-		utils.SendError(w, "Invalid JSON payload", http.StatusBadRequest)
+	var body patchRequest
+	if err := helpers.DecodeJSON(w, r, &body); err != nil {
+		response.Fail(w, r, err)
 		return
 	}
 
-	v := NewUserValidator()
-	if !v.ValidatePartial(updates) {
-		utils.SendError(w, utils.StringifyErrors(v.Errors), http.StatusBadRequest)
-		return
-	}
-	// log.Printf("Payload: %+v\n", updates)
-	updated, found := h.userStore.Update(id, func(u *db.User) {
-		if updates.Email != nil {
-			u.Email = *updates.Email
-		}
-		if updates.FirstName != nil {
-			u.FirstName = *updates.FirstName
-		}
-		if updates.LastName != nil {
-			u.LastName = *updates.LastName
-		}
-		if updates.AvatarURL != nil {
-			u.AvatarURL = updates.AvatarURL
-		}
-		if updates.PhoneNumber != nil {
-			u.PhoneNumber = updates.PhoneNumber
-		}
-		if updates.Role != nil {
-			u.Role = *updates.Role
-		}
-		if updates.Status != nil {
-			u.Status = *updates.Status
-		}
-		if updates.IsEmailVerified != nil {
-			u.IsEmailVerified = *updates.IsEmailVerified
-		}
-		u.UpdatedAt = time.Now().UTC()
+	updated, err := h.service.Update(r.Context(), middlewares.MustIdentity(r.Context()), id, &domain.UserPatch{
+		Email:           body.Email,
+		FirstName:       body.FirstName,
+		LastName:        body.LastName,
+		AvatarURL:       body.AvatarURL,
+		PhoneNumber:     body.PhoneNumber,
+		Role:            body.Role,
+		Status:          body.Status,
+		IsEmailVerified: body.IsEmailVerified,
 	})
-
-	if !found {
-		utils.SendError(w, "User not found", http.StatusNotFound)
+	if err != nil {
+		response.Fail(w, r, err)
 		return
 	}
 
-	utils.SendData(w, updated, http.StatusOK)
+	response.Item(w, http.StatusOK, updated, userLinks(updated))
 }
