@@ -62,6 +62,14 @@ func (m *Middlewares) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 				response.Fail(w, r, err)
 				return
 			}
+			// A nil user with no error is not something the adapter does, but
+			// this runs before every authenticated request: treating it as "no
+			// such account" costs a comparison and turns a panic on every
+			// request into a 401 on one.
+			if current == nil {
+				unauthorized(w, "the account this token belongs to no longer exists")
+				return
+			}
 			if !current.CanAuthenticate() {
 				response.Error(w, http.StatusForbidden, response.CodeForbidden,
 					"this account is not active")

@@ -26,7 +26,7 @@ func (h *Handler) PutProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	replaced, err := h.service.Replace(r.Context(), id, domain.Product{
+	replaced, err := h.service.Replace(r.Context(), id, &domain.Product{
 		Title:       body.Title,
 		Price:       body.Price,
 		ImgUrl:      body.ImgUrl,

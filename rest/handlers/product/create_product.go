@@ -28,7 +28,7 @@ func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	created, err := h.service.Create(r.Context(), domain.Product{
+	created, err := h.service.Create(r.Context(), &domain.Product{
 		Title:       body.Title,
 		Price:       body.Price,
 		ImgUrl:      body.ImgUrl,

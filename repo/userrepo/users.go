@@ -46,8 +46,10 @@ var userSortFields = map[string]string{
 
 const userDefaultOrder = "created_at DESC, id ASC"
 
-func (r *UserRepo) All(ctx context.Context, page domain.Page, filter domain.UserFilter) (domain.PageResult[domain.User], error) {
-	var empty domain.PageResult[domain.User]
+func (r *UserRepo) All(ctx context.Context, page domain.Page, filter *domain.UserFilter) (*domain.PageResult[*domain.User], error) {
+	if filter == nil {
+		filter = &domain.UserFilter{}
+	}
 
 	conds := userConditions(filter)
 	where := conds.SQL()
@@ -70,30 +72,35 @@ func (r *UserRepo) All(ctx context.Context, page domain.Page, filter domain.User
 		TotalCount int `db:"total_count"`
 	}
 	if err := r.dbCon.SelectContext(ctx, &rows, query, append(args, page.Limit(), page.Offset())...); err != nil {
-		return empty, fmt.Errorf("listing users: %w", err)
+		return nil, fmt.Errorf("listing users: %w", err)
 	}
 
-	items := make([]domain.User, 0, len(rows))
+	items := make([]*domain.User, 0, len(rows))
 	total := 0
 	for _, row := range rows {
-		items = append(items, row.User)
+		// Copied out explicitly, so what escapes to the caller is a user and not
+		// a pointer into a scan row that also carries the count.
+		found := row.User
+		items = append(items, &found)
 		total = row.TotalCount
 	}
 
+	// An empty page still has to report the size of the collection: without a
+	// separate count, page 5 of a 3-page result would claim there are no users.
 	if len(rows) == 0 {
 		var err error
 		if total, err = dbquery.CountRows(ctx, r.dbCon, "users", where, args); err != nil {
-			return empty, err
+			return nil, err
 		}
 	}
 
-	return domain.PageResult[domain.User]{Items: items, Total: total, Page: page}, nil
+	return &domain.PageResult[*domain.User]{Items: items, Total: total, Page: page}, nil
 }
 
 // userConditions always excludes soft-deleted rows. A deleted user is gone as
 // far as every caller of this adapter is concerned, and making that the default
 // here means no caller can forget it.
-func userConditions(filter domain.UserFilter) *dbquery.Conditions {
+func userConditions(filter *domain.UserFilter) *dbquery.Conditions {
 	conds := &dbquery.Conditions{}
 	conds.Where("deleted_at IS NULL")
 
@@ -113,37 +120,37 @@ func userConditions(filter domain.UserFilter) *dbquery.Conditions {
 	return conds
 }
 
-func (r *UserRepo) ByID(ctx context.Context, id uuid.UUID) (domain.User, error) {
+func (r *UserRepo) ByID(ctx context.Context, id uuid.UUID) (*domain.User, error) {
 	query := fmt.Sprintf(`SELECT %s FROM users WHERE id = $1 AND deleted_at IS NULL`, userColumns)
 
 	var found domain.User
 	if err := r.dbCon.GetContext(ctx, &found, query, id); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return domain.User{}, domain.ErrUserNotFound
+			return nil, domain.ErrUserNotFound
 		}
-		return domain.User{}, fmt.Errorf("fetching user %s: %w", id, err)
+		return nil, fmt.Errorf("fetching user %s: %w", id, err)
 	}
-	return found, nil
+	return &found, nil
 }
 
 // ByEmail matches on the lowered address, which is what the unique index is
 // built on -- so a lookup can never miss a row that the index would refuse to
 // let be inserted twice.
-func (r *UserRepo) ByEmail(ctx context.Context, email string) (domain.User, error) {
+func (r *UserRepo) ByEmail(ctx context.Context, email string) (*domain.User, error) {
 	query := fmt.Sprintf(
 		`SELECT %s FROM users WHERE lower(email) = $1 AND deleted_at IS NULL`, userColumns)
 
 	var found domain.User
 	if err := r.dbCon.GetContext(ctx, &found, query, domain.NormalizeEmail(email)); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return domain.User{}, domain.ErrUserNotFound
+			return nil, domain.ErrUserNotFound
 		}
-		return domain.User{}, fmt.Errorf("fetching user by email: %w", err)
+		return nil, fmt.Errorf("fetching user by email: %w", err)
 	}
-	return found, nil
+	return &found, nil
 }
 
-func (r *UserRepo) Create(ctx context.Context, u domain.User) (domain.User, error) {
+func (r *UserRepo) Create(ctx context.Context, u *domain.User) (*domain.User, error) {
 	query := fmt.Sprintf(`
 		INSERT INTO users (email, password_hash, first_name, last_name,
 		                   avatar_url, phone_number, role, status, is_email_verified)
@@ -156,19 +163,19 @@ func (r *UserRepo) Create(ctx context.Context, u domain.User) (domain.User, erro
 		u.AvatarURL, u.PhoneNumber, u.Role, u.Status, u.IsEmailVerified)
 	if err != nil {
 		if dbquery.IsUniqueViolation(err) {
-			return domain.User{}, domain.ErrEmailTaken
+			return nil, domain.ErrEmailTaken
 		}
-		return domain.User{}, fmt.Errorf("creating user: %w", err)
+		return nil, fmt.Errorf("creating user: %w", err)
 	}
-	return created, nil
+	return &created, nil
 }
 
 // Update locks the row for the read-modify-write, for the same reason
 // productRepo.Update does.
-func (r *UserRepo) Update(ctx context.Context, id uuid.UUID, apply func(*domain.User)) (domain.User, error) {
+func (r *UserRepo) Update(ctx context.Context, id uuid.UUID, apply func(*domain.User)) (*domain.User, error) {
 	tx, err := r.dbCon.BeginTxx(ctx, nil)
 	if err != nil {
-		return domain.User{}, fmt.Errorf("updating user %s: %w", id, err)
+		return nil, fmt.Errorf("updating user %s: %w", id, err)
 	}
 	defer tx.Rollback()
 
@@ -177,9 +184,9 @@ func (r *UserRepo) Update(ctx context.Context, id uuid.UUID, apply func(*domain.
 		`SELECT %s FROM users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, userColumns)
 	if err := tx.GetContext(ctx, &current, lockRow, id); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return domain.User{}, domain.ErrUserNotFound
+			return nil, domain.ErrUserNotFound
 		}
-		return domain.User{}, fmt.Errorf("locking user %s: %w", id, err)
+		return nil, fmt.Errorf("locking user %s: %w", id, err)
 	}
 
 	apply(&current)
@@ -199,15 +206,15 @@ func (r *UserRepo) Update(ctx context.Context, id uuid.UUID, apply func(*domain.
 		current.IsEmailVerified, id)
 	if err != nil {
 		if dbquery.IsUniqueViolation(err) {
-			return domain.User{}, domain.ErrEmailTaken
+			return nil, domain.ErrEmailTaken
 		}
-		return domain.User{}, fmt.Errorf("updating user %s: %w", id, err)
+		return nil, fmt.Errorf("updating user %s: %w", id, err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		return domain.User{}, fmt.Errorf("committing user %s: %w", id, err)
+		return nil, fmt.Errorf("committing user %s: %w", id, err)
 	}
-	return updated, nil
+	return &updated, nil
 }
 
 // Delete is a soft delete. Orders, sessions and audit history reference a user,

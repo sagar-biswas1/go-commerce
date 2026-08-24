@@ -35,7 +35,11 @@ func (h *Handler) Sessions(w http.ResponseWriter, r *http.Request) {
 	)
 }
 
-func sessionResourceLinks(t domain.RefreshToken) response.Links {
+func sessionResourceLinks(t *domain.RefreshToken) response.Links {
+	if t == nil {
+		return nil
+	}
+
 	self := response.Path(basePath, "sessions", t.ID.String())
 	return response.Links{
 		"self":   self,

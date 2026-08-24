@@ -3,9 +3,9 @@ package user
 import (
 	"net/http"
 
+	"go-commerce/domain"
 	"go-commerce/rest/helpers"
 	"go-commerce/rest/response"
-	usersvc "go-commerce/user"
 )
 
 // createRequest is an admin-side user creation.
@@ -31,7 +31,7 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	created, err := h.service.Create(r.Context(), usersvc.CreateInput{
+	created, err := h.service.Create(r.Context(), &domain.UserCreateInput{
 		Email:       body.Email,
 		Password:    body.Password,
 		FirstName:   body.FirstName,

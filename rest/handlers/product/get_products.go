@@ -16,7 +16,7 @@ import (
 func (h *Handler) GetProducts(w http.ResponseWriter, r *http.Request) {
 	page := response.PageFromRequest(r)
 
-	filter := domain.ProductFilter{
+	filter := &domain.ProductFilter{
 		Search:   r.URL.Query().Get("q"),
 		MinPrice: response.FloatParam(r, "minPrice"),
 		MaxPrice: response.FloatParam(r, "maxPrice"),

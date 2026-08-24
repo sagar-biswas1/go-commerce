@@ -16,6 +16,10 @@ import (
 )
 
 // ProductRepo is the Postgres implementation of product.Repository.
+//
+// It holds the pool, not the port: embedding product.Repository here would make
+// every method it forgot to write compile anyway and panic on the first call,
+// which is exactly the mistake the assertion below is meant to catch.
 type ProductRepo struct {
 	dbCon *sqlx.DB
 }
@@ -43,8 +47,10 @@ var productSortFields = map[string]string{
 
 const productDefaultOrder = "created_at DESC, id ASC"
 
-func (r *ProductRepo) All(ctx context.Context, page domain.Page, filter domain.ProductFilter) (domain.PageResult[domain.Product], error) {
-	var empty domain.PageResult[domain.Product]
+func (r *ProductRepo) All(ctx context.Context, page domain.Page, filter *domain.ProductFilter) (*domain.PageResult[*domain.Product], error) {
+	if filter == nil {
+		filter = &domain.ProductFilter{}
+	}
 
 	conds := productConditions(filter)
 	where := conds.SQL()
@@ -67,27 +73,34 @@ func (r *ProductRepo) All(ctx context.Context, page domain.Page, filter domain.P
 		TotalCount int `db:"total_count"`
 	}
 	if err := r.dbCon.SelectContext(ctx, &rows, query, append(args, page.Limit(), page.Offset())...); err != nil {
-		return empty, fmt.Errorf("listing products: %w", err)
+		return nil, fmt.Errorf("listing products: %w", err)
 	}
 
-	items := make([]domain.Product, 0, len(rows))
+	items := make([]*domain.Product, 0, len(rows))
 	total := 0
 	for _, row := range rows {
-		items = append(items, row.Product)
+		// row is a fresh copy each iteration, but the embedded product is copied
+		// out explicitly so what escapes to the caller is a product and not a
+		// pointer into a scan row that also carries the count.
+		found := row.Product
+		items = append(items, &found)
 		total = row.TotalCount
 	}
 
+	// An empty page still has to report the size of the collection: without a
+	// separate count, page 5 of a 3-page result would claim the collection is
+	// empty rather than that the page is past the end.
 	if len(rows) == 0 {
 		var err error
 		if total, err = dbquery.CountRows(ctx, r.dbCon, "products", where, args); err != nil {
-			return empty, err
+			return nil, err
 		}
 	}
 
-	return domain.PageResult[domain.Product]{Items: items, Total: total, Page: page}, nil
+	return &domain.PageResult[*domain.Product]{Items: items, Total: total, Page: page}, nil
 }
 
-func productConditions(filter domain.ProductFilter) *dbquery.Conditions {
+func productConditions(filter *domain.ProductFilter) *dbquery.Conditions {
 	conds := &dbquery.Conditions{}
 
 	if search := strings.TrimSpace(filter.Search); search != "" {
@@ -106,7 +119,7 @@ func productConditions(filter domain.ProductFilter) *dbquery.Conditions {
 	return conds
 }
 
-func (r *ProductRepo) Create(ctx context.Context, p domain.Product) (domain.Product, error) {
+func (r *ProductRepo) Create(ctx context.Context, p *domain.Product) (*domain.Product, error) {
 	query := fmt.Sprintf(`
 		INSERT INTO products (title, price, img_url, description)
 		VALUES ($1, $2, $3, $4)
@@ -115,22 +128,22 @@ func (r *ProductRepo) Create(ctx context.Context, p domain.Product) (domain.Prod
 	var created domain.Product
 	if err := r.dbCon.GetContext(ctx, &created, query,
 		p.Title, p.Price, p.ImgUrl, p.Description); err != nil {
-		return domain.Product{}, fmt.Errorf("creating product: %w", err)
+		return nil, fmt.Errorf("creating product: %w", err)
 	}
-	return created, nil
+	return &created, nil
 }
 
-func (r *ProductRepo) ByID(ctx context.Context, id uuid.UUID) (domain.Product, error) {
+func (r *ProductRepo) ByID(ctx context.Context, id uuid.UUID) (*domain.Product, error) {
 	query := fmt.Sprintf(`SELECT %s FROM products WHERE id = $1`, productColumns)
 
 	var found domain.Product
 	if err := r.dbCon.GetContext(ctx, &found, query, id); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return domain.Product{}, domain.ErrProductNotFound
+			return nil, domain.ErrProductNotFound
 		}
-		return domain.Product{}, fmt.Errorf("fetching product %s: %w", id, err)
+		return nil, fmt.Errorf("fetching product %s: %w", id, err)
 	}
-	return found, nil
+	return &found, nil
 }
 
 func (r *ProductRepo) Delete(ctx context.Context, id uuid.UUID) error {
@@ -156,10 +169,10 @@ func (r *ProductRepo) Delete(ctx context.Context, id uuid.UUID) error {
 // Two concurrent PATCHes would otherwise both read the old row, and whichever
 // wrote second would silently undo the other's change -- a client would get 200
 // and see its edit disappear.
-func (r *ProductRepo) Update(ctx context.Context, id uuid.UUID, apply func(*domain.Product)) (domain.Product, error) {
+func (r *ProductRepo) Update(ctx context.Context, id uuid.UUID, apply func(*domain.Product)) (*domain.Product, error) {
 	tx, err := r.dbCon.BeginTxx(ctx, nil)
 	if err != nil {
-		return domain.Product{}, fmt.Errorf("updating product %s: %w", id, err)
+		return nil, fmt.Errorf("updating product %s: %w", id, err)
 	}
 	defer tx.Rollback()
 
@@ -167,9 +180,9 @@ func (r *ProductRepo) Update(ctx context.Context, id uuid.UUID, apply func(*doma
 	lockRow := fmt.Sprintf(`SELECT %s FROM products WHERE id = $1 FOR UPDATE`, productColumns)
 	if err := tx.GetContext(ctx, &current, lockRow, id); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return domain.Product{}, domain.ErrProductNotFound
+			return nil, domain.ErrProductNotFound
 		}
-		return domain.Product{}, fmt.Errorf("locking product %s: %w", id, err)
+		return nil, fmt.Errorf("locking product %s: %w", id, err)
 	}
 
 	apply(&current)
@@ -183,11 +196,11 @@ func (r *ProductRepo) Update(ctx context.Context, id uuid.UUID, apply func(*doma
 	var updated domain.Product
 	if err := tx.GetContext(ctx, &updated, query,
 		current.Title, current.Price, current.ImgUrl, current.Description, id); err != nil {
-		return domain.Product{}, fmt.Errorf("updating product %s: %w", id, err)
+		return nil, fmt.Errorf("updating product %s: %w", id, err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		return domain.Product{}, fmt.Errorf("committing product %s: %w", id, err)
+		return nil, fmt.Errorf("committing product %s: %w", id, err)
 	}
-	return updated, nil
+	return &updated, nil
 }

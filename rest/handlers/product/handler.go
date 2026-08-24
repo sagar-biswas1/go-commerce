@@ -4,7 +4,6 @@
 package product
 
 import (
-	productsvc "go-commerce/product"
 	middlewares "go-commerce/rest/middlewares"
 )
 
@@ -12,14 +11,14 @@ import (
 // its middleware pipeline are both handed to it at construction, which is what
 // lets a test drive it with a fake service and no database.
 type Handler struct {
-	service            productsvc.Service
+	service            Service
 	middlewaresManager *middlewares.Manager
 }
 
 // NewHandler wires a product handler to the service and module pipeline it
 // should use. A nil pipeline means "no module middleware", not a panic at the
 // first request.
-func NewHandler(service productsvc.Service, moduleMiddlewares *middlewares.Manager) *Handler {
+func NewHandler(service Service, moduleMiddlewares *middlewares.Manager) *Handler {
 	return &Handler{
 		service:            service,
 		middlewaresManager: moduleMiddlewares,

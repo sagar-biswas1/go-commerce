@@ -2,8 +2,12 @@ package cmd
 
 import (
 	"go-commerce/auth"
+	"go-commerce/product"
 	"go-commerce/repo/authrepo"
 	"go-commerce/repo/userrepo"
+	authhandler "go-commerce/rest/handlers/auth"
+	producthandler "go-commerce/rest/handlers/product"
+	userhandler "go-commerce/rest/handlers/user"
 	"go-commerce/user"
 )
 
@@ -27,4 +31,13 @@ var (
 	// a role change or a new password takes effect now rather than whenever the
 	// last access token happens to lapse.
 	_ user.SessionRevoker = (*authrepo.RefreshTokenRepo)(nil)
+
+	// The transport declares the service shape it drives, and the aggregate
+	// declares the shape it offers. Neither imports the other, so this is where
+	// the two are checked against each other -- otherwise the day they drift the
+	// error would land on the NewHandler line, blaming the wiring for a change
+	// made in a port.
+	_ producthandler.Service = (product.Service)(nil)
+	_ userhandler.Service    = (user.Service)(nil)
+	_ authhandler.Service    = (auth.Service)(nil)
 )

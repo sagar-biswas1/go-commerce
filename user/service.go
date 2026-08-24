@@ -17,6 +17,10 @@ type service struct {
 	sessions SessionRevoker
 }
 
+// Compile-time proof that the implementation still matches the port it is handed
+// out as, checked in the file that would break it.
+var _ Service = (*service)(nil)
+
 var (
 	once     sync.Once
 	instance Service
@@ -34,18 +38,26 @@ func NewService(repo Repository, hasher PasswordHasher, sessions SessionRevoker)
 	return &service{repo: repo, hasher: hasher, sessions: sessions}
 }
 
-func (s *service) List(ctx context.Context, page domain.Page, filter domain.UserFilter) (domain.PageResult[domain.User], error) {
+func (s *service) List(ctx context.Context, page domain.Page, filter *domain.UserFilter) (*domain.PageResult[*domain.User], error) {
+	// A nil filter is a listing with nothing narrowed, not a caller mistake.
+	if filter == nil {
+		filter = &domain.UserFilter{}
+	}
 	if err := filter.Validate(); err != nil {
-		return domain.PageResult[domain.User]{}, err
+		return nil, err
 	}
 	return s.repo.All(ctx, page, filter)
 }
 
-func (s *service) Get(ctx context.Context, id uuid.UUID) (domain.User, error) {
+func (s *service) Get(ctx context.Context, id uuid.UUID) (*domain.User, error) {
 	return s.repo.ByID(ctx, id)
 }
 
-func (s *service) Create(ctx context.Context, input CreateInput) (domain.User, error) {
+func (s *service) Create(ctx context.Context, input *domain.UserCreateInput) (*domain.User, error) {
+	if input == nil {
+		return nil, domain.ErrInvalid
+	}
+
 	newUser := domain.User{
 		Email:       input.Email,
 		FirstName:   input.FirstName,
@@ -58,19 +70,19 @@ func (s *service) Create(ctx context.Context, input CreateInput) (domain.User, e
 	newUser.Normalize()
 
 	if err := newUser.Validate(input.Password); err != nil {
-		return domain.User{}, err
+		return nil, err
 	}
 
 	hashed, err := s.hasher.Hash(input.Password)
 	if err != nil {
-		return domain.User{}, err
+		return nil, err
 	}
 	newUser.Password = hashed
 
 	// No pre-flight "does this email exist" query: two concurrent requests can
 	// both pass such a check. The unique index decides, and the repository
 	// turns its violation into ErrEmailTaken.
-	return s.repo.Create(ctx, newUser)
+	return s.repo.Create(ctx, &newUser)
 }
 
 // Update applies a partial change on behalf of actor.
@@ -79,37 +91,39 @@ func (s *service) Create(ctx context.Context, input CreateInput) (domain.User, e
 // depends on what is being changed, not just on who is asking: a user may edit
 // their own profile, but role, status and email verification are authorization
 // state and belong to an admin.
-func (s *service) Update(ctx context.Context, actor domain.Identity, id uuid.UUID, patch Patch) (domain.User, error) {
-	if patch.Empty() {
+func (s *service) Update(ctx context.Context, actor domain.Identity, id uuid.UUID, patch *domain.UserPatch) (*domain.User, error) {
+	if patch == nil || patch.Empty() {
 		v := domain.NewValidationError()
 		v.Add("body", "no updatable fields were provided")
-		return domain.User{}, v.OrNil()
+		return nil, v.OrNil()
 	}
 	if !actor.CanActOn(id) {
-		return domain.User{}, domain.ErrForbidden
+		return nil, domain.ErrForbidden
 	}
 	if patch.Privileged() && !actor.IsAdmin() {
-		return domain.User{}, domain.ErrForbidden
+		return nil, domain.ErrForbidden
 	}
 
 	current, err := s.repo.ByID(ctx, id)
 	if err != nil {
-		return domain.User{}, err
+		return nil, err
 	}
 
-	preview := current
-	patch.apply(&preview)
+	// The preview is a copy on purpose: it is a dry run, and the row it is based
+	// on must not carry the trial merge into the locked write below.
+	preview := *current
+	patch.Apply(&preview)
 	preview.Normalize()
 	if err := preview.ValidateProfile(); err != nil {
-		return domain.User{}, err
+		return nil, err
 	}
 
 	updated, err := s.repo.Update(ctx, id, func(u *domain.User) {
-		patch.apply(u)
+		patch.Apply(u)
 		u.Normalize()
 	})
 	if err != nil {
-		return domain.User{}, err
+		return nil, err
 	}
 
 	// A user who has just been suspended, deleted, or handed a different role
@@ -123,7 +137,7 @@ func (s *service) Update(ctx context.Context, actor domain.Identity, id uuid.UUI
 	return updated, nil
 }
 
-func roleOrStatusChanged(before, after domain.User) bool {
+func roleOrStatusChanged(before, after *domain.User) bool {
 	return before.Role != after.Role || before.Status != after.Status
 }
 

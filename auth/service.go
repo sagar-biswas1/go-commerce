@@ -19,6 +19,10 @@ type service struct {
 	hasher PasswordHasher
 }
 
+// Compile-time proof that the implementation still matches the port it is handed
+// out as, checked in the file that would break it.
+var _ Service = (*service)(nil)
+
 var (
 	once     sync.Once
 	instance Service
@@ -41,7 +45,11 @@ func NewService(users UserReader, tokens TokenStore, issuer TokenIssuer, hasher 
 // Role is not taken from the request. The old handler accepted whatever role the
 // body named, which let anyone register as an admin; a new account is always an
 // ordinary user, and promoting one is an admin's job.
-func (s *service) Register(ctx context.Context, input RegisterInput) (domain.User, error) {
+func (s *service) Register(ctx context.Context, input *domain.RegisterInput) (*domain.User, error) {
+	if input == nil {
+		return nil, domain.ErrInvalid
+	}
+
 	newUser := domain.User{
 		Email:     input.Email,
 		FirstName: input.FirstName,
@@ -52,20 +60,20 @@ func (s *service) Register(ctx context.Context, input RegisterInput) (domain.Use
 	newUser.Normalize()
 
 	if err := newUser.Validate(input.Password); err != nil {
-		return domain.User{}, err
+		return nil, err
 	}
 
 	hashed, err := s.hasher.Hash(input.Password)
 	if err != nil {
-		return domain.User{}, err
+		return nil, err
 	}
 	newUser.Password = hashed
 
-	return s.users.Create(ctx, newUser)
+	return s.users.Create(ctx, &newUser)
 }
 
 // Login exchanges credentials for a token pair.
-func (s *service) Login(ctx context.Context, email, password string, session SessionContext) (domain.User, domain.TokenPair, error) {
+func (s *service) Login(ctx context.Context, email, password string, session *domain.SessionContext) (*domain.User, *domain.TokenPair, error) {
 	found, err := s.users.ByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
@@ -74,26 +82,26 @@ func (s *service) Login(ctx context.Context, email, password string, session Ses
 			// password. Returning early here is what turns a timing difference
 			// into a way to enumerate registered addresses.
 			_ = s.hasher.Compare(dummyHash, password)
-			return domain.User{}, domain.TokenPair{}, domain.ErrInvalidCredentials
+			return nil, nil, domain.ErrInvalidCredentials
 		}
-		return domain.User{}, domain.TokenPair{}, err
+		return nil, nil, err
 	}
 
 	if err := s.hasher.Compare(found.Password, password); err != nil {
-		return domain.User{}, domain.TokenPair{}, domain.ErrInvalidCredentials
+		return nil, nil, domain.ErrInvalidCredentials
 	}
 
 	// The password was right, so say plainly that the account itself is the
 	// problem -- the caller has already proved they own it.
 	if !found.CanAuthenticate() {
-		return domain.User{}, domain.TokenPair{}, domain.ErrUserNotActive
+		return nil, nil, domain.ErrUserNotActive
 	}
 
 	// A fresh login starts a new family: it is a new session, unrelated to
 	// whatever else this user has open.
 	pair, err := s.issuePair(ctx, found, uuid.New(), "", session)
 	if err != nil {
-		return domain.User{}, domain.TokenPair{}, err
+		return nil, nil, err
 	}
 
 	if err := s.users.TouchLastLogin(ctx, found.ID); err != nil {
@@ -118,29 +126,29 @@ func (s *service) Login(ctx context.Context, email, password string, session Ses
 //     the thief got there first, or the legitimate client is replaying one the
 //     thief already spent. There is no way to tell which, so both are signed
 //     out and the real owner logs in again.
-func (s *service) Refresh(ctx context.Context, refreshToken string, session SessionContext) (domain.User, domain.TokenPair, error) {
+func (s *service) Refresh(ctx context.Context, refreshToken string, session *domain.SessionContext) (*domain.User, *domain.TokenPair, error) {
 	refreshToken = strings.TrimSpace(refreshToken)
 	if refreshToken == "" {
-		return domain.User{}, domain.TokenPair{}, domain.ErrRefreshTokenNotFound
+		return nil, nil, domain.ErrRefreshTokenNotFound
 	}
 
 	userID, err := s.issuer.ParseRefreshToken(refreshToken)
 	if err != nil {
-		return domain.User{}, domain.TokenPair{}, err
+		return nil, nil, err
 	}
 
 	found, err := s.users.ByID(ctx, userID)
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
-			return domain.User{}, domain.TokenPair{}, domain.ErrUnauthorized
+			return nil, nil, domain.ErrUnauthorized
 		}
-		return domain.User{}, domain.TokenPair{}, err
+		return nil, nil, err
 	}
 	if !found.CanAuthenticate() {
 		// The account was suspended or deleted since this token was minted.
 		// Retire the session rather than renewing it.
 		s.revokeQuietly(ctx, refreshToken)
-		return domain.User{}, domain.TokenPair{}, domain.ErrUserNotActive
+		return nil, nil, domain.ErrUserNotActive
 	}
 
 	// Read the family before rotating, so the successor's own claim names the
@@ -153,9 +161,9 @@ func (s *service) Refresh(ctx context.Context, refreshToken string, session Sess
 		if errors.Is(err, domain.ErrNotFound) {
 			// Correctly signed, but no such row: either it was swept long after
 			// expiry, or it was minted by a build using a different store.
-			return domain.User{}, domain.TokenPair{}, domain.ErrRefreshTokenNotFound
+			return nil, nil, domain.ErrRefreshTokenNotFound
 		}
-		return domain.User{}, domain.TokenPair{}, err
+		return nil, nil, err
 	}
 
 	pair, err := s.issuePair(ctx, found, familyID, refreshToken, session)
@@ -163,7 +171,7 @@ func (s *service) Refresh(ctx context.Context, refreshToken string, session Sess
 		if errors.Is(err, domain.ErrRefreshTokenReused) {
 			s.revokeFamily(ctx, familyID, found.ID)
 		}
-		return domain.User{}, domain.TokenPair{}, err
+		return nil, nil, err
 	}
 
 	return found, pair, nil
@@ -178,22 +186,28 @@ func (s *service) Refresh(ctx context.Context, refreshToken string, session Sess
 // than a live token nobody is tracking.
 func (s *service) issuePair(
 	ctx context.Context,
-	forUser domain.User,
+	forUser *domain.User,
 	familyID uuid.UUID,
 	previousToken string,
-	session SessionContext,
-) (domain.TokenPair, error) {
+	session *domain.SessionContext,
+) (*domain.TokenPair, error) {
 	accessToken, accessExpiry, err := s.issuer.IssueAccessToken(forUser.ID, forUser.Role)
 	if err != nil {
-		return domain.TokenPair{}, err
+		return nil, err
 	}
 
 	refreshToken, refreshExpiry, err := s.issuer.IssueRefreshToken(forUser.ID, familyID)
 	if err != nil {
-		return domain.TokenPair{}, err
+		return nil, err
 	}
 
-	record := domain.RefreshToken{
+	// A nil session context is a client that told us nothing about itself, which
+	// is allowed: both columns are nullable and neither is ever trusted.
+	if session == nil {
+		session = &domain.SessionContext{}
+	}
+
+	record := &domain.RefreshToken{
 		UserID:    forUser.ID,
 		FamilyID:  familyID,
 		TokenHash: domain.HashToken(refreshToken),
@@ -204,13 +218,13 @@ func (s *service) issuePair(
 
 	if previousToken == "" {
 		if _, err := s.tokens.Create(ctx, record); err != nil {
-			return domain.TokenPair{}, err
+			return nil, err
 		}
 	} else if _, err := s.tokens.Rotate(ctx, previousToken, record); err != nil {
-		return domain.TokenPair{}, err
+		return nil, err
 	}
 
-	return domain.TokenPair{
+	return &domain.TokenPair{
 		AccessToken:      accessToken,
 		AccessExpiresAt:  accessExpiry,
 		RefreshToken:     refreshToken,
@@ -244,11 +258,11 @@ func (s *service) LogoutEverywhere(ctx context.Context, userID uuid.UUID) (int64
 	return s.tokens.RevokeAllForUser(ctx, userID)
 }
 
-func (s *service) Me(ctx context.Context, userID uuid.UUID) (domain.User, error) {
+func (s *service) Me(ctx context.Context, userID uuid.UUID) (*domain.User, error) {
 	return s.users.ByID(ctx, userID)
 }
 
-func (s *service) Sessions(ctx context.Context, userID uuid.UUID, page domain.Page) (domain.PageResult[domain.RefreshToken], error) {
+func (s *service) Sessions(ctx context.Context, userID uuid.UUID, page domain.Page) (*domain.PageResult[*domain.RefreshToken], error) {
 	return s.tokens.ActiveByUser(ctx, userID, page)
 }
 

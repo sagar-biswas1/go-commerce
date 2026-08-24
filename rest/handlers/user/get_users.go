@@ -13,7 +13,7 @@ import (
 func (h *Handler) GetUsers(w http.ResponseWriter, r *http.Request) {
 	page := response.PageFromRequest(r)
 
-	filter := domain.UserFilter{
+	filter := &domain.UserFilter{
 		Search: r.URL.Query().Get("q"),
 		Role:   r.URL.Query().Get("role"),
 		Status: r.URL.Query().Get("status"),

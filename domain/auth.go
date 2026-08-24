@@ -101,3 +101,24 @@ func (i Identity) CanActOn(owner uuid.UUID) bool {
 func wrap(message string, category error) error {
 	return fmt.Errorf("%s: %w", message, category)
 }
+
+// RegisterInput is a public registration.
+//
+// There is no role field, and that is the point: a new account is always an
+// ordinary user. A type with nowhere to put a role is a stronger guarantee than
+// a service that remembers to ignore one.
+type RegisterInput struct {
+	FirstName string
+	LastName  string
+	Email     string
+	Password  string
+}
+
+// SessionContext is what a client incidentally tells us about where a session
+// lives. It is recorded so a "signed in on these devices" screen has something
+// to show, and is never trusted for authorization -- both values are
+// attacker-controlled.
+type SessionContext struct {
+	UserAgent string
+	IPAddress string
+}

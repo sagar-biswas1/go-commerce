@@ -151,8 +151,10 @@ func WithLinks(v any, links Links) any {
 	}
 
 	var object map[string]json.RawMessage
-	if err := json.Unmarshal(encoded, &object); err != nil {
-		// Not a JSON object -- nothing to add a member to.
+	if err := json.Unmarshal(encoded, &object); err != nil || object == nil {
+		// Not a JSON object -- nothing to add a member to. A nil pointer lands
+		// here too: it encodes as null, which unmarshals into a nil map that
+		// would panic on the assignment below.
 		return v
 	}
 

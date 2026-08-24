@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	authsvc "go-commerce/auth"
 	"go-commerce/domain"
 	"go-commerce/rest/helpers"
 	"go-commerce/rest/response"
@@ -30,12 +29,12 @@ const (
 // sessionContext gathers what the request incidentally says about the client, so
 // a session listing has something to show its owner.
 //
-// It is built here rather than in rest/helpers because it is an auth type, and a
-// shared helper returning one would make every other handler package depend on
-// this aggregate. Both values are recorded and never trusted: they are
-// attacker-controlled, so nothing authorizes on them.
-func sessionContext(r *http.Request) authsvc.SessionContext {
-	return authsvc.SessionContext{
+// It is built here rather than in rest/helpers because a shared helper returning
+// one would hand every other handler package a dependency it has no use for.
+// Both values are recorded and never trusted: they are attacker-controlled, so
+// nothing authorizes on them.
+func sessionContext(r *http.Request) *domain.SessionContext {
+	return &domain.SessionContext{
 		UserAgent: helpers.UserAgent(r),
 		IPAddress: helpers.ClientIP(r),
 	}
@@ -98,14 +97,14 @@ func refreshTokenFromRequest(r *http.Request, fromBody string) string {
 // client's own JavaScript can never read it -- putting it in the body as well
 // would undo exactly what the cookie is for.
 type sessionPayload struct {
-	AccessToken string      `json:"accessToken"`
-	TokenType   string      `json:"tokenType"`
-	ExpiresIn   int         `json:"expiresIn"`
-	ExpiresAt   time.Time   `json:"expiresAt"`
-	User        domain.User `json:"user"`
+	AccessToken string       `json:"accessToken"`
+	TokenType   string       `json:"tokenType"`
+	ExpiresIn   int          `json:"expiresIn"`
+	ExpiresAt   time.Time    `json:"expiresAt"`
+	User        *domain.User `json:"user"`
 }
 
-func newSessionPayload(user domain.User, pair domain.TokenPair) sessionPayload {
+func newSessionPayload(user *domain.User, pair *domain.TokenPair) sessionPayload {
 	return sessionPayload{
 		AccessToken: pair.AccessToken,
 		TokenType:   "Bearer",

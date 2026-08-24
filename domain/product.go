@@ -97,3 +97,44 @@ func (f ProductFilter) Validate() error {
 func looksLikeURL(raw string) bool {
 	return strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://")
 }
+
+// ProductPatch is a partial change to a product: every field is optional, and a
+// nil field means "leave this alone".
+//
+// The pointers are what tell "field omitted" apart from "field set to its zero
+// value". Without them a request that says nothing about price and one that sets
+// price to 0 arrive identical, and the second one silently stops working.
+//
+// It lives here, beside ProductFilter, because more than one layer has to name
+// it: the transport builds one, the service applies one. Putting the shared
+// vocabulary in the layer both of them already depend on is what keeps them from
+// having to depend on each other.
+type ProductPatch struct {
+	Title       *string
+	Price       *float64
+	ImgUrl      *string
+	Description *string
+}
+
+// Empty reports a patch that asks for nothing, which is a client mistake worth
+// naming rather than a successful no-op.
+func (p ProductPatch) Empty() bool {
+	return p.Title == nil && p.Price == nil && p.ImgUrl == nil && p.Description == nil
+}
+
+// Apply writes the present fields onto a product, leaving the absent ones as
+// they were.
+func (p ProductPatch) Apply(target *Product) {
+	if p.Title != nil {
+		target.Title = *p.Title
+	}
+	if p.Price != nil {
+		target.Price = *p.Price
+	}
+	if p.ImgUrl != nil {
+		target.ImgUrl = *p.ImgUrl
+	}
+	if p.Description != nil {
+		target.Description = *p.Description
+	}
+}

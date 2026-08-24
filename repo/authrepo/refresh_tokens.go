@@ -32,11 +32,19 @@ func NewRefreshTokenRepo(dbCon *sqlx.DB) *RefreshTokenRepo {
 const refreshTokenColumns = `id, user_id, family_id, token_hash, user_agent,
 	ip_address, expires_at, revoked_at, replaced_by, created_at`
 
-func (r *RefreshTokenRepo) Create(ctx context.Context, t domain.RefreshToken) (domain.RefreshToken, error) {
+func (r *RefreshTokenRepo) Create(ctx context.Context, t *domain.RefreshToken) (*domain.RefreshToken, error) {
 	return insertRefreshToken(ctx, r.dbCon, t)
 }
 
-func insertRefreshToken(ctx context.Context, q dbquery.Getter, t domain.RefreshToken) (domain.RefreshToken, error) {
+// insertRefreshToken writes one row. It may assign the family id, so it works on
+// a copy: filling in the caller's struct would leave the service holding a
+// record that looks stored but is not.
+func insertRefreshToken(ctx context.Context, q dbquery.Getter, in *domain.RefreshToken) (*domain.RefreshToken, error) {
+	if in == nil {
+		return nil, fmt.Errorf("storing refresh token: %w", domain.ErrInvalid)
+	}
+
+	t := *in
 	if t.FamilyID == uuid.Nil {
 		// A token with no family is the first of one.
 		t.FamilyID = uuid.New()
@@ -51,22 +59,22 @@ func insertRefreshToken(ctx context.Context, q dbquery.Getter, t domain.RefreshT
 	var created domain.RefreshToken
 	if err := q.GetContext(ctx, &created, query,
 		t.UserID, t.FamilyID, t.TokenHash, t.UserAgent, t.IPAddress, t.ExpiresAt); err != nil {
-		return domain.RefreshToken{}, fmt.Errorf("storing refresh token: %w", err)
+		return nil, fmt.Errorf("storing refresh token: %w", err)
 	}
-	return created, nil
+	return &created, nil
 }
 
-func (r *RefreshTokenRepo) ByToken(ctx context.Context, token string) (domain.RefreshToken, error) {
+func (r *RefreshTokenRepo) ByToken(ctx context.Context, token string) (*domain.RefreshToken, error) {
 	query := fmt.Sprintf(`SELECT %s FROM refresh_tokens WHERE token_hash = $1`, refreshTokenColumns)
 
 	var found domain.RefreshToken
 	if err := r.dbCon.GetContext(ctx, &found, query, domain.HashToken(token)); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return domain.RefreshToken{}, domain.ErrRefreshTokenNotFound
+			return nil, domain.ErrRefreshTokenNotFound
 		}
-		return domain.RefreshToken{}, fmt.Errorf("fetching refresh token: %w", err)
+		return nil, fmt.Errorf("fetching refresh token: %w", err)
 	}
-	return found, nil
+	return &found, nil
 }
 
 func (r *RefreshTokenRepo) FamilyOf(ctx context.Context, token string) (uuid.UUID, error) {
@@ -91,10 +99,14 @@ func (r *RefreshTokenRepo) FamilyOf(ctx context.Context, token string) (uuid.UUI
 // them changes a row, and the other is told the token was already spent. A
 // check-then-act would let both through and mint two live sessions from one
 // token.
-func (r *RefreshTokenRepo) Rotate(ctx context.Context, oldToken string, next domain.RefreshToken) (domain.RefreshToken, error) {
+func (r *RefreshTokenRepo) Rotate(ctx context.Context, oldToken string, next *domain.RefreshToken) (*domain.RefreshToken, error) {
+	if next == nil {
+		return nil, fmt.Errorf("rotating refresh token: %w", domain.ErrInvalid)
+	}
+
 	tx, err := r.dbCon.BeginTxx(ctx, nil)
 	if err != nil {
-		return domain.RefreshToken{}, fmt.Errorf("rotating refresh token: %w", err)
+		return nil, fmt.Errorf("rotating refresh token: %w", err)
 	}
 	defer tx.Rollback()
 
@@ -107,29 +119,31 @@ func (r *RefreshTokenRepo) Rotate(ctx context.Context, oldToken string, next dom
 	var spent domain.RefreshToken
 	if err := tx.GetContext(ctx, &spent, spend, domain.HashToken(oldToken)); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return domain.RefreshToken{}, classifyUnspendable(ctx, tx, oldToken)
+			return nil, classifyUnspendable(ctx, tx, oldToken)
 		}
-		return domain.RefreshToken{}, fmt.Errorf("spending refresh token: %w", err)
+		return nil, fmt.Errorf("spending refresh token: %w", err)
 	}
 
 	// The successor inherits the family and the owner from the row it replaces,
 	// not from what the caller passed: the database is what knows whose token
-	// this actually was.
-	next.FamilyID = spent.FamilyID
-	next.UserID = spent.UserID
+	// this actually was. Written onto a copy, so a rotation that fails to commit
+	// does not leave the caller's record claiming a family it never joined.
+	successor := *next
+	successor.FamilyID = spent.FamilyID
+	successor.UserID = spent.UserID
 
-	created, err := insertRefreshToken(ctx, tx, next)
+	created, err := insertRefreshToken(ctx, tx, &successor)
 	if err != nil {
-		return domain.RefreshToken{}, err
+		return nil, err
 	}
 
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE refresh_tokens SET replaced_by = $1 WHERE id = $2`, created.ID, spent.ID); err != nil {
-		return domain.RefreshToken{}, fmt.Errorf("linking rotated refresh token: %w", err)
+		return nil, fmt.Errorf("linking rotated refresh token: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		return domain.RefreshToken{}, fmt.Errorf("committing refresh token rotation: %w", err)
+		return nil, fmt.Errorf("committing refresh token rotation: %w", err)
 	}
 	return created, nil
 }
@@ -207,9 +221,7 @@ func (r *RefreshTokenRepo) revokeMany(ctx context.Context, query string, args ..
 
 // ActiveByUser lists the sessions a user could still refresh, newest first --
 // what a "where you are signed in" screen shows.
-func (r *RefreshTokenRepo) ActiveByUser(ctx context.Context, userID uuid.UUID, page domain.Page) (domain.PageResult[domain.RefreshToken], error) {
-	var empty domain.PageResult[domain.RefreshToken]
-
+func (r *RefreshTokenRepo) ActiveByUser(ctx context.Context, userID uuid.UUID, page domain.Page) (*domain.PageResult[*domain.RefreshToken], error) {
 	const activeWhere = `WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > now()`
 
 	query := fmt.Sprintf(`
@@ -224,24 +236,25 @@ func (r *RefreshTokenRepo) ActiveByUser(ctx context.Context, userID uuid.UUID, p
 		TotalCount int `db:"total_count"`
 	}
 	if err := r.dbCon.SelectContext(ctx, &rows, query, userID, page.Limit(), page.Offset()); err != nil {
-		return empty, fmt.Errorf("listing sessions for %s: %w", userID, err)
+		return nil, fmt.Errorf("listing sessions for %s: %w", userID, err)
 	}
 
-	items := make([]domain.RefreshToken, 0, len(rows))
+	items := make([]*domain.RefreshToken, 0, len(rows))
 	total := 0
 	for _, row := range rows {
-		items = append(items, row.RefreshToken)
+		found := row.RefreshToken
+		items = append(items, &found)
 		total = row.TotalCount
 	}
 
 	if len(rows) == 0 {
 		var err error
 		if total, err = dbquery.CountRows(ctx, r.dbCon, "refresh_tokens", activeWhere, []any{userID}); err != nil {
-			return empty, err
+			return nil, err
 		}
 	}
 
-	return domain.PageResult[domain.RefreshToken]{Items: items, Total: total, Page: page}, nil
+	return &domain.PageResult[*domain.RefreshToken]{Items: items, Total: total, Page: page}, nil
 }
 
 // DeleteExpired drops rows that are past expiry by more than retention.

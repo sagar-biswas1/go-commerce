@@ -26,6 +26,9 @@ func (m *Middlewares) NewManager(middlewares ...Middleware) *Manager {
 // Use appends middleware to the current pipeline. The first middleware added is
 // the outermost in the chain, so it sees the request first and the response last.
 func (mngr *Manager) Use(middlewares ...Middleware) *Manager {
+	if mngr == nil {
+		return nil
+	}
 	mngr.stack = append(mngr.stack, middlewares...)
 	return mngr
 }
@@ -36,15 +39,27 @@ func (mngr *Manager) With(middlewares ...Middleware) Middleware {
 	return chain(middlewares)
 }
 
+// The four composers below tolerate a nil manager, because NewHandler promises a
+// module may be built without a pipeline. Without these guards that promise
+// fails at route registration -- before a single request arrives, and nowhere
+// near the constructor that made the claim.
+
 // Then runs the handler through the manager's pipeline.
 func (mngr *Manager) Then(handler http.HandlerFunc) http.HandlerFunc {
+	if mngr == nil {
+		return handler
+	}
 	return chain(mngr.stack)(handler)
 }
 
 // ThenWith runs the handler through the manager's pipeline and then attaches
 // route-specific middleware, which sits closest to the handler.
 func (mngr *Manager) ThenWith(handler http.HandlerFunc, middlewares ...Middleware) http.HandlerFunc {
-	pipeline := append(append([]Middleware{}, mngr.stack...), middlewares...)
+	var stack []Middleware
+	if mngr != nil {
+		stack = mngr.stack
+	}
+	pipeline := append(append([]Middleware{}, stack...), middlewares...)
 	return chain(pipeline)(handler)
 }
 

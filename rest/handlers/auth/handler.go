@@ -2,12 +2,11 @@
 package auth
 
 import (
-	authsvc "go-commerce/auth"
 	middlewares "go-commerce/rest/middlewares"
 )
 
 type Handler struct {
-	service     authsvc.Service
+	service     Service
 	middlewares *middlewares.Manager
 	// secureCookies controls the Secure attribute on the refresh cookie. It is
 	// injected rather than hardcoded because a cookie marked Secure is not sent
@@ -16,7 +15,7 @@ type Handler struct {
 	secureCookies bool
 }
 
-func NewHandler(service authsvc.Service, moduleMiddlewares *middlewares.Manager, secureCookies bool) *Handler {
+func NewHandler(service Service, moduleMiddlewares *middlewares.Manager, secureCookies bool) *Handler {
 	return &Handler{
 		service:       service,
 		middlewares:   moduleMiddlewares,

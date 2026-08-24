@@ -14,7 +14,11 @@ const basePath = "/products"
 // Naming the write relations is the part that earns the term HATEOAS: a client
 // discovers that a product can be replaced or deleted from the response, rather
 // than from documentation it has to keep in sync by hand.
-func productLinks(p domain.Product) response.Links {
+func productLinks(p *domain.Product) response.Links {
+	if p == nil {
+		return nil
+	}
+
 	self := response.Path(basePath, p.ID.String())
 
 	return response.Links{

@@ -22,7 +22,7 @@ import (
 // not keep recreating or resetting one.
 func bootstrapAdmin(ctx context.Context, cfg *config.Config, service user.Service, repository user.Repository) {
 	// One row is enough to answer "is there an admin", so ask for one.
-	existing, err := repository.All(ctx, domain.NewPage(1, 1), domain.UserFilter{Role: domain.RoleAdmin})
+	existing, err := repository.All(ctx, domain.NewPage(1, 1), &domain.UserFilter{Role: domain.RoleAdmin})
 	if err != nil {
 		log.Printf("[bootstrap] could not check for an existing admin: %v", err)
 		return
@@ -37,7 +37,7 @@ func bootstrapAdmin(ctx context.Context, cfg *config.Config, service user.Servic
 		return
 	}
 
-	created, err := service.Create(ctx, user.CreateInput{
+	created, err := service.Create(ctx, &domain.UserCreateInput{
 		Email:     cfg.Bootstrap.AdminEmail,
 		Password:  cfg.Bootstrap.AdminPassword,
 		FirstName: "Initial",

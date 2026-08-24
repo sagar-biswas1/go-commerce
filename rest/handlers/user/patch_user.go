@@ -3,10 +3,10 @@ package user
 import (
 	"net/http"
 
+	"go-commerce/domain"
 	"go-commerce/rest/helpers"
 	"go-commerce/rest/middlewares"
 	"go-commerce/rest/response"
-	usersvc "go-commerce/user"
 )
 
 // patchRequest mirrors the updatable fields. Pointers tell an omitted field
@@ -40,7 +40,7 @@ func (h *Handler) PatchUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updated, err := h.service.Update(r.Context(), middlewares.MustIdentity(r.Context()), id, usersvc.Patch{
+	updated, err := h.service.Update(r.Context(), middlewares.MustIdentity(r.Context()), id, &domain.UserPatch{
 		Email:           body.Email,
 		FirstName:       body.FirstName,
 		LastName:        body.LastName,

@@ -263,3 +263,78 @@ func (f UserFilter) Validate() error {
 
 	return v.OrNil()
 }
+
+// UserCreateInput is an admin-side user creation.
+//
+// The password arrives in plaintext and is hashed before it reaches the entity,
+// which is why this is a separate type from User: User holds a digest and has
+// nowhere to put a plaintext password, so no caller can hand one straight
+// through to storage.
+//
+// It lives here for the same reason UserPatch does -- both the transport that
+// builds one and the service that consumes one have to name it.
+type UserCreateInput struct {
+	Email       string
+	Password    string
+	FirstName   string
+	LastName    string
+	AvatarURL   *string
+	PhoneNumber *string
+	Role        string
+	Status      string
+}
+
+// UserPatch is a partial change to a user. A nil field means "leave this alone",
+// which is what tells an omitted field apart from one set to its zero value.
+type UserPatch struct {
+	Email           *string
+	FirstName       *string
+	LastName        *string
+	AvatarURL       *string
+	PhoneNumber     *string
+	Role            *string
+	Status          *string
+	IsEmailVerified *bool
+}
+
+// Empty reports a patch that asks for nothing.
+func (p UserPatch) Empty() bool {
+	return p.Email == nil && p.FirstName == nil && p.LastName == nil &&
+		p.AvatarURL == nil && p.PhoneNumber == nil && p.Role == nil &&
+		p.Status == nil && p.IsEmailVerified == nil
+}
+
+// Privileged reports whether this patch touches a field only an admin may set.
+// Role, status and verified-ness are authorization state: a user who could set
+// their own role could make themselves an admin.
+func (p UserPatch) Privileged() bool {
+	return p.Role != nil || p.Status != nil || p.IsEmailVerified != nil
+}
+
+// Apply writes the present fields onto a user.
+func (p UserPatch) Apply(target *User) {
+	if p.Email != nil {
+		target.Email = *p.Email
+	}
+	if p.FirstName != nil {
+		target.FirstName = *p.FirstName
+	}
+	if p.LastName != nil {
+		target.LastName = *p.LastName
+	}
+	if p.AvatarURL != nil {
+		target.AvatarURL = p.AvatarURL
+	}
+	if p.PhoneNumber != nil {
+		target.PhoneNumber = p.PhoneNumber
+	}
+	if p.Role != nil {
+		target.Role = *p.Role
+	}
+	if p.Status != nil {
+		target.Status = *p.Status
+	}
+	if p.IsEmailVerified != nil {
+		target.IsEmailVerified = *p.IsEmailVerified
+	}
+}

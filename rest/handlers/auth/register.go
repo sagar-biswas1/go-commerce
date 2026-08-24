@@ -3,7 +3,7 @@ package auth
 import (
 	"net/http"
 
-	authsvc "go-commerce/auth"
+	"go-commerce/domain"
 	"go-commerce/rest/helpers"
 	"go-commerce/rest/response"
 )
@@ -28,7 +28,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	created, err := h.service.Register(r.Context(), authsvc.RegisterInput{
+	created, err := h.service.Register(r.Context(), &domain.RegisterInput{
 		FirstName: body.FirstName,
 		LastName:  body.LastName,
 		Email:     body.Email,

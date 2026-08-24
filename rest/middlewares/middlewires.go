@@ -29,7 +29,7 @@ type TokenValidator interface {
 // suspended account stops being able to act immediately rather than in fifteen
 // minutes. Leave it nil and the tokens stay stateless.
 type UserStatusChecker interface {
-	ByID(ctx context.Context, id uuid.UUID) (domain.User, error)
+	ByID(ctx context.Context, id uuid.UUID) (*domain.User, error)
 }
 
 type Middlewares struct {

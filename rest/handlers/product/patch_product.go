@@ -3,7 +3,7 @@ package product
 import (
 	"net/http"
 
-	productsvc "go-commerce/product"
+	"go-commerce/domain"
 	"go-commerce/rest/helpers"
 	"go-commerce/rest/response"
 )
@@ -31,7 +31,7 @@ func (h *Handler) PatchProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updated, err := h.service.Update(r.Context(), id, productsvc.Patch{
+	updated, err := h.service.Update(r.Context(), id, &domain.ProductPatch{
 		Title:       body.Title,
 		Price:       body.Price,
 		ImgUrl:      body.ImgUrl,
