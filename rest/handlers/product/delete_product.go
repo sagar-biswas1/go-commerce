@@ -1,21 +1,24 @@
 package product
 
 import (
-	"go-commerce/utils"
 	"net/http"
+
+	"go-commerce/rest/helpers"
+	"go-commerce/rest/response"
 )
 
 func (h *Handler) DeleteProduct(w http.ResponseWriter, r *http.Request) {
-	id, ok := h.productID(w, r)
-	if !ok {
+	id, err := helpers.PathUUID(r, "id")
+	if err != nil {
+		response.Fail(w, r, err)
 		return
 	}
 
-	if !h.store.Delete(id) {
-		utils.SendError(w, "Product not found", http.StatusNotFound)
+	if err := h.service.Delete(r.Context(), id); err != nil {
+		response.Fail(w, r, err)
 		return
 	}
 
 	// 204 is the conventional reply for a delete with nothing left to return.
-	w.WriteHeader(http.StatusNoContent)
+	response.NoContent(w)
 }

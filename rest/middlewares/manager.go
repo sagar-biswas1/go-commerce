@@ -53,6 +53,33 @@ func (mngr *Manager) ThenHandler(handler http.Handler) http.Handler {
 	return mngr.Then(handler.ServeHTTP)
 }
 
+// Recover, RequireAuth and the rest are forwarded so a module can reach the
+// shared middleware through the manager it was handed, without also being handed
+// the Middlewares value. A nil manager returns the handler unwrapped rather than
+// panicking on the first request.
+func (mngr *Manager) Recover(next http.HandlerFunc) http.HandlerFunc {
+	if mngr == nil || mngr.middlewares == nil {
+		return next
+	}
+	return mngr.middlewares.Recover(next)
+}
+
+// RequireRole builds a role gate. It must be composed inside RequireAuth, which
+// is what puts an identity in the context for it to read.
+func (mngr *Manager) RequireRole(roles ...string) Middleware {
+	if mngr == nil || mngr.middlewares == nil {
+		return func(next http.HandlerFunc) http.HandlerFunc { return next }
+	}
+	return mngr.middlewares.RequireRole(roles...)
+}
+
+func (mngr *Manager) RequireAdmin(next http.HandlerFunc) http.HandlerFunc {
+	if mngr == nil || mngr.middlewares == nil {
+		return next
+	}
+	return mngr.middlewares.RequireAdmin(next)
+}
+
 func (mngr *Manager) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 	if mngr == nil || mngr.middlewares == nil {
 		return next

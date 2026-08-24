@@ -1,21 +1,24 @@
 package product
 
 import (
-	"go-commerce/utils"
 	"net/http"
+
+	"go-commerce/rest/helpers"
+	"go-commerce/rest/response"
 )
 
 func (h *Handler) GetProduct(w http.ResponseWriter, r *http.Request) {
-	id, ok := h.productID(w, r)
-	if !ok {
+	id, err := helpers.PathUUID(r, "id")
+	if err != nil {
+		response.Fail(w, r, err)
 		return
 	}
 
-	found, exists := h.store.ByID(id)
-	if !exists {
-		utils.SendError(w, "Product not found", http.StatusNotFound)
+	found, err := h.service.Get(r.Context(), id)
+	if err != nil {
+		response.Fail(w, r, err)
 		return
 	}
 
-	utils.SendData(w, found, http.StatusOK)
+	response.Item(w, http.StatusOK, found, productLinks(found))
 }

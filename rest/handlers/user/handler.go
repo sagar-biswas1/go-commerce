@@ -1,26 +1,19 @@
+// Package user is the HTTP transport for the user resource.
 package user
 
 import (
-	db "go-commerce/database"
 	middlewares "go-commerce/rest/middlewares"
+	usersvc "go-commerce/user"
 )
 
-type UserStore interface {
-	All() []db.User
-	ByID(id int) (db.User, bool)
-	Create(p db.User) db.User
-	Update(id int, apply func(*db.User)) (db.User, bool)
-	Delete(id int) bool
-}
-
 type Handler struct {
-	userStore   UserStore
+	service     usersvc.Service
 	middlewares *middlewares.Manager
 }
 
-func NewHandler(userStore UserStore, moduleMiddlewares *middlewares.Manager) *Handler {
+func NewHandler(service usersvc.Service, moduleMiddlewares *middlewares.Manager) *Handler {
 	return &Handler{
-		userStore:   userStore,
+		service:     service,
 		middlewares: moduleMiddlewares,
 	}
 }
