@@ -15,9 +15,9 @@ import (
 
 	"go-commerce/auth"
 	"go-commerce/config"
-	dbqueries "go-commerce/db_queries"
 	"go-commerce/infra/db"
 	"go-commerce/infra/security"
+	"go-commerce/migration"
 	"go-commerce/product"
 	"go-commerce/repo/authrepo"
 	"go-commerce/repo/productrepo"
@@ -33,9 +33,9 @@ import (
 
 // Serve builds the application and runs it until it is told to stop.
 func Serve() {
-	cfg := config.GetConfig()
-	if cfg == nil {
-		log.Fatal("configuration could not be loaded")
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		log.Fatalf("configuration failed to load: %v", err)
 	}
 
 	// One context for the whole process, cancelled by an interrupt or a SIGTERM.
@@ -55,7 +55,11 @@ func Serve() {
 
 	// The schema is applied before anything is served, so the process either
 	// starts against a database it agrees with or does not start at all.
-	if err := db.Migrate(dbCon, dbqueries.Migrations); err != nil {
+	//
+	// This is the same runner the migrate CLI drives, holding the same advisory
+	// lock -- so several instances starting together do not race, and one of
+	// them migrating does not make the others fail.
+	if err := db.Migrate(ctx, dbCon, migration.FS); err != nil {
 		log.Fatalf("could not migrate the database: %v", err)
 	}
 

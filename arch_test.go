@@ -21,9 +21,11 @@ var layers = map[string]int{
 	// The centre: entities and the rules over them, plus the process's own
 	// settings. Nothing in here knows this program has an HTTP interface or a
 	// database.
-	"domain":     0,
-	"config":     0,
-	"db_queries": 0,
+	"domain": 0,
+	"config": 0,
+	// The schema. It is data, not code: an embed.FS and a directory name, so it
+	// can sit at the centre without dragging anything in.
+	"migration": 0,
 
 	// Mechanism with no knowledge of any aggregate: the reply envelope and the
 	// SQL plumbing. Shared this widely, either one would hand its dependencies
